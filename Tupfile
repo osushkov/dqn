@@ -2,6 +2,7 @@ include_rules
 : src/*.o \
 src/neuralnetwork/neuralnetwork.a \
 src/neuralnetwork/cuda/cuda.a \
+src/connectfour/connectfour.a \
 src/math/math.a \
 src/common/common.a \
 |> $(CC) %f -o %o $(CLFLAGS) |> dqn
