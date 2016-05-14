@@ -16,6 +16,13 @@ GameState::GameState(const GameState &other) : cells(other.cells), colHeights(ot
 GameState::GameState(GameState &&other)
     : cells(move(other.cells)), colHeights(move(other.colHeights)) {}
 
+GameState &GameState::operator=(const GameState &other) {
+  this->cells = other.cells;
+  this->colHeights = other.colHeights;
+  this->numTokensOnBoard = other.numTokensOnBoard;
+  return *this;
+}
+
 bool GameState::operator==(const GameState &other) const {
   assert(cells.size() == other.cells.size());
 

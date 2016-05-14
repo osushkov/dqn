@@ -1,5 +1,6 @@
 include_rules
 : src/*.o \
+src/learning/learning.a \
 src/neuralnetwork/neuralnetwork.a \
 src/neuralnetwork/cuda/cuda.a \
 src/connectfour/connectfour.a \

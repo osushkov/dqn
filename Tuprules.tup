@@ -2,8 +2,9 @@ CC = g++
 CUDACC = nvcc
 
 CCFLAGS += -std=c++11
-CCFLAGS += -I/usr/local/include -I/usr/include/eigen3
-CCFLAGS += -Wall -Wno-deprecated-declarations
+CCFLAGS += -I/usr/local/include -I/usr/include/eigen3 -I/usr/include/eigen3
+CCFLAGS += -I/home/osushkov/Programming/boost_1_60_0
+CCFLAGS += -Wall -Wno-deprecated-declarations -Wno-unused-variable
 
 CUDAFLAGS += --std=c++11
 CUDAFLAGS += --use_fast_math
@@ -21,4 +22,6 @@ endif
 
 CLFLAGS += -L/usr/local/cuda/lib64 -lcudart
 CLFLAGS += -L/usr/local/lib
+CLFLAGS += -L/home/osushkov/Programming/boost_1_60_0/stage/lib
 CLFLAGS += -lpthread
+CLFLAGS += -lboost_system -lboost_thread

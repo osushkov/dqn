@@ -9,6 +9,7 @@ class GameAction {
   unsigned col;
 
 public:
+  GameAction() = default; // useful to have a no args constructor
   GameAction(unsigned col) : col(col) {}
 
   inline unsigned GetColumn(void) const { return col; }
