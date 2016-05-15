@@ -2,6 +2,7 @@
 #pragma once
 
 #include <ostream>
+#include <vector>
 
 namespace connectfour {
 
@@ -9,6 +10,13 @@ class GameAction {
   unsigned col;
 
 public:
+  // Returns a vector of all possible actions in the game.
+  static const std::vector<GameAction> &ALL_ACTIONS(void);
+
+  static GameAction ACTION(unsigned index);
+  static std::vector<GameAction> ACTIONS(std::vector<unsigned> indices);
+  static unsigned ACTION_INDEX(const GameAction &ga);
+
   GameAction() = default; // useful to have a no args constructor
   GameAction(unsigned col) : col(col) {}
 

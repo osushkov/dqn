@@ -8,7 +8,7 @@
 namespace learning {
 
 class ExperienceMemory {
-  mutable boost::shared_mutex mutex;
+  mutable boost::shared_mutex smutex;
 
   vector<ExperienceMoment> pastExperiences;
   unsigned head;

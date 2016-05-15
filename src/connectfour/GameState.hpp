@@ -34,7 +34,8 @@ public:
 
   size_t HashCode() const;
 
-  vector<GameAction> AvailableActions(void) const;
+  // Returns indices into the GameAction::ALL_ACTIONS vector.
+  vector<unsigned> AvailableActions(void) const; // TODO: this should do a JIT caching
   GameState SuccessorState(const GameAction &action) const;
 };
 }

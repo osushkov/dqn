@@ -80,13 +80,15 @@ size_t GameState::HashCode(void) const {
   return result;
 }
 
-vector<GameAction> GameState::AvailableActions(void) const {
-  vector<GameAction> result;
-  result.reserve(BOARD_WIDTH);
+vector<unsigned> GameState::AvailableActions(void) const {
+  const vector<GameAction> &actionSet = GameAction::ALL_ACTIONS();
 
-  for (unsigned col = 0; col < BOARD_WIDTH; col++) {
-    if (colHeights[col] < BOARD_HEIGHT) {
-      result.push_back(GameAction(col));
+  vector<unsigned> result;
+  result.reserve(actionSet.size());
+
+  for (unsigned i = 0; i < actionSet.size(); i++) {
+    if (colHeights[actionSet[i].GetColumn()] < BOARD_HEIGHT) {
+      result.push_back(i);
     }
   }
 

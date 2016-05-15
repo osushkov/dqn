@@ -11,8 +11,8 @@ ExperienceMemory::ExperienceMemory(unsigned maxSize)
     : pastExperiences(maxSize), head(0), tail(0), occupancy(0) {}
 
 void ExperienceMemory::AddExperiences(const vector<ExperienceMoment> &moments) {
-  boost::upgrade_lock<boost::shared_mutex> lock(mutex);
-  boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+  // obtain a write lock
+  boost::unique_lock<boost::shared_mutex> lock(smutex);
 
   for (unsigned i = 0; i < moments.size(); i++) {
     pastExperiences[tail] = moments[i];
@@ -26,7 +26,8 @@ void ExperienceMemory::AddExperiences(const vector<ExperienceMoment> &moments) {
 }
 
 vector<ExperienceMoment> ExperienceMemory::Sample(unsigned numSamples) const {
-  boost::shared_lock<boost::shared_mutex> lock(mutex);
+  // obtain a read lock
+  boost::shared_lock<boost::shared_mutex> lock(smutex);
 
   vector<ExperienceMoment> result;
   result.reserve(numSamples);
