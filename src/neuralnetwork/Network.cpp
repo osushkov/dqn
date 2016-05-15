@@ -6,25 +6,38 @@
 #include "Activations.hpp"
 #include "cuda/CudaNetwork.hpp"
 
+#include <boost/thread/shared_mutex.hpp>
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <mutex>
 
 using namespace neuralnetwork;
 
 struct Network::NetworkImpl {
+  mutable boost::shared_mutex rwMutex;
+  mutable std::mutex trainMutex;
+
   NetworkSpec spec;
   math::Tensor layerWeights;
   uptr<cuda::CudaNetwork> cudaNetwork;
 
-  NetworkImpl(const NetworkSpec &spec) : spec(spec) {
+  NetworkImpl(const NetworkSpec &spec, bool isTrainable) : spec(spec) {
     assert(spec.numInputs > 0 && spec.numOutputs > 0);
     initialiseWeights();
-    initialiseCuda();
+
+    if (isTrainable) {
+      initialiseCuda();
+    } else {
+      cudaNetwork = nullptr;
+    }
   }
 
-  EVector Process(const EVector &input) {
+  EVector Process(const EVector &input) const {
     assert(input.rows() == spec.numInputs);
+
+    // obtain a read lock
+    boost::shared_lock<boost::shared_mutex> lock(rwMutex);
 
     EVector layerOutput = input;
     for (unsigned i = 0; i < layerWeights.NumLayers(); i++) {
@@ -38,6 +51,11 @@ struct Network::NetworkImpl {
   }
 
   void Refresh(void) {
+    assert(cudaNetwork != nullptr);
+
+    // obtain a write lock
+    boost::unique_lock<boost::shared_mutex> lock(rwMutex);
+
     vector<math::MatrixView> weightViews;
     for (unsigned i = 0; i < layerWeights.NumLayers(); i++) {
       weightViews.push_back(math::GetMatrixView(layerWeights(i)));
@@ -46,6 +64,7 @@ struct Network::NetworkImpl {
   }
 
   void Update(const SamplesProvider &samplesProvider) {
+    assert(cudaNetwork != nullptr);
     assert(samplesProvider.NumSamples() <= spec.maxBatchSize);
 
     EMatrix input(samplesProvider.NumSamples(), spec.numInputs);
@@ -68,7 +87,15 @@ struct Network::NetworkImpl {
 
     math::MatrixView batchInputs = math::GetMatrixView(input);
     math::MatrixView batchOutputs = math::GetMatrixView(output);
+
+    std::lock_guard<std::mutex> lock(trainMutex);
     cudaNetwork->Train(batchInputs, batchOutputs);
+  }
+
+  uptr<NetworkImpl> ReadOnlyCopy(void) const {
+    auto result = make_unique<NetworkImpl>(spec, false);
+    result->layerWeights = layerWeights;
+    return result;
   }
 
   EVector getLayerOutput(const EVector &prevLayer, const EMatrix &layerWeights,
@@ -160,9 +187,16 @@ struct Network::NetworkImpl {
   }
 };
 
-Network::Network(const NetworkSpec &spec) : impl(new NetworkImpl(spec)) {}
+Network::Network(const NetworkSpec &spec) : impl(new NetworkImpl(spec, true)) {}
 Network::~Network() = default;
 
-EVector Network::Process(const EVector &input) { return impl->Process(input); }
+EVector Network::Process(const EVector &input) const { return impl->Process(input); }
 void Network::Refresh(void) { impl->Refresh(); }
 void Network::Update(const SamplesProvider &samplesProvider) { impl->Update(samplesProvider); }
+
+uptr<Network> Network::ReadOnlyCopy(void) const {
+  // Its a bit annoying I cant used make_unique coz of the private constructor...
+  uptr<Network> roNetwork(new Network());
+  roNetwork->impl = impl->ReadOnlyCopy();
+  return roNetwork;
+}
