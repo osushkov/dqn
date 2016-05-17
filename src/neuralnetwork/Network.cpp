@@ -44,7 +44,6 @@ struct Network::NetworkImpl {
       LayerActivation func =
           (i == layerWeights.NumLayers() - 1) ? spec.outputActivation : spec.hiddenActivation;
       layerOutput = getLayerOutput(layerOutput, layerWeights(i), func);
-      layerOutput *= spec.nodeActivationRate;
     }
 
     return layerOutput;
@@ -93,6 +92,9 @@ struct Network::NetworkImpl {
   }
 
   uptr<NetworkImpl> ReadOnlyCopy(void) const {
+    // obtain a read lock
+    boost::shared_lock<boost::shared_mutex> lock(rwMutex);
+
     auto result = make_unique<NetworkImpl>(spec, false);
     result->layerWeights = layerWeights;
     return result;

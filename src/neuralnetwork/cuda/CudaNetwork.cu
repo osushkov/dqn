@@ -1,13 +1,13 @@
 
 #include "CudaNetwork.hpp"
 #include "Util.hpp"
-#include "Random.hpp"
 #include "SoftmaxKernel.hpp"
 #include "ForwardPassKernel.hpp"
 #include "TransposeKernel.hpp"
 #include "BackwardDeltaKernel.hpp"
 #include "GradientKernel.hpp"
 #include "Constants.hpp"
+#include "Random.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -265,8 +265,7 @@ private:
           networkSpec.outputActivation : networkSpec.hiddenActivation;
 
       ForwardPassKernel::Apply(d_layerWeights[i-1], d_layerOutputs[i-1], d_layerOutputs[i],
-          activation, rnd, networkSpec.nodeActivationRate, i == (d_layerOutputs.size() - 1),
-          computeStream);
+          activation, computeStream);
     }
 
     LayerBatchOutputs lastLayer = d_layerOutputs[d_layerOutputs.size() - 1];

@@ -1,19 +1,20 @@
 #pragma once
 
 #include "../connectfour/GameState.hpp"
+#include "../math/Math.hpp"
 
 using namespace connectfour;
 
 namespace learning {
 
 struct ExperienceMoment {
-  GameState initialState;
+  EVector initialState;
   GameAction actionTaken;
-  GameState successorState;
+  EVector successorState;
   float reward;
 
   ExperienceMoment() = default;
-  ExperienceMoment(GameState initialState, GameAction actionTaken, GameState successorState,
+  ExperienceMoment(EVector initialState, GameAction actionTaken, EVector successorState,
                    float reward)
       : initialState(initialState), actionTaken(actionTaken), successorState(successorState),
         reward(reward) {}

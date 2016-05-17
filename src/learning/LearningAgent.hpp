@@ -13,10 +13,15 @@ namespace learning {
 
 class LearningAgent : public Agent {
 public:
+  static EVector EncodeGameState(const GameState *state);
+
   LearningAgent();
   virtual ~LearningAgent();
 
   GameAction SelectAction(const GameState *state) override;
+
+  void SetPRandom(float pRandom);
+  GameAction SelectLearningAction(const GameState *state, const EVector &encodedState);
   void Learn(const vector<ExperienceMoment> &moments);
 
 private:
