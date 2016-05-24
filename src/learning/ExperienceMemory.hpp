@@ -25,7 +25,9 @@ public:
 
   void AddExperience(const ExperienceMoment &moment);
   void AddExperiences(const vector<ExperienceMoment> &moments);
+
   vector<ExperienceMoment> Sample(unsigned numSamples) const;
+  unsigned NumMemories(void) const;
 
 private:
   unsigned wrappedIndex(unsigned i) const;

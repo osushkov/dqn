@@ -52,6 +52,11 @@ vector<ExperienceMoment> ExperienceMemory::Sample(unsigned numSamples) const {
   return result;
 }
 
+unsigned ExperienceMemory::NumMemories(void) const {
+  boost::shared_lock<boost::shared_mutex> lock(smutex);
+  return occupancy;
+}
+
 unsigned ExperienceMemory::wrappedIndex(unsigned i) const {
   assert(occupancy > 0 && pastExperiences.size() > 0);
   return ((i % occupancy) + head) % pastExperiences.size();

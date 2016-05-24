@@ -13,11 +13,13 @@ using namespace learning;
 
 struct LearningAgent::LearningAgentImpl {
   float pRandom;
+  float maxQTemperature;
+
   uptr<neuralnetwork::Network> learningNet;
   uptr<neuralnetwork::Network> targetNet;
   unsigned itersSinceTargetUpdated = 0;
 
-  LearningAgentImpl() : pRandom(0.0f) {
+  LearningAgentImpl() : pRandom(0.0f), maxQTemperature(0.0001f) {
     neuralnetwork::NetworkSpec spec;
     spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
@@ -39,6 +41,11 @@ struct LearningAgent::LearningAgentImpl {
   void SetPRandom(float pRandom) {
     assert(pRandom >= 0.0f && pRandom <= 1.0f);
     this->pRandom = pRandom;
+  }
+
+  void SetMaxQTemperature(float temp) {
+    assert(temp > 0.0f);
+    maxQTemperature = temp;
   }
 
   GameAction SelectLearningAction(const GameState *state, const EVector &encodedState) {
@@ -85,12 +92,22 @@ struct LearningAgent::LearningAgentImpl {
 
   float maxQ(const EVector &encodedState) const {
     EVector qa = targetNet->Process(encodedState);
+    std::vector<float> qvals(qa.rows());
 
-    float maxVal = qa(0);
-    for (int i = 1; i < qa.rows(); i++) {
-      maxVal = max(maxVal, qa(i));
+    for (unsigned i = 0; i < qvals.size(); i++) {
+      qvals[i] = qa(i);
     }
-    return maxVal;
+
+    return Util::SoftmaxWeightedAverage(qvals, maxQTemperature);
+
+    // float maxVal = qa(0);
+    // for (int i = 1; i < qa.rows(); i++) {
+    //   maxVal = max(maxVal, qa(i));
+    // }
+    //
+    // return maxVal;
+    // std::cout << wa << " : " << maxVal << std::endl;
+    // return wa;
   }
 
   GameAction chooseBestAction(const EVector &encodedState) {
@@ -178,6 +195,7 @@ LearningAgent::~LearningAgent() = default;
 GameAction LearningAgent::SelectAction(const GameState *state) { return impl->SelectAction(state); }
 
 void LearningAgent::SetPRandom(float pRandom) { impl->SetPRandom(pRandom); }
+void LearningAgent::SetMaxQTemperature(float temp) { impl->SetMaxQTemperature(temp); }
 
 GameAction LearningAgent::SelectLearningAction(const GameState *state,
                                                const EVector &encodedState) {
