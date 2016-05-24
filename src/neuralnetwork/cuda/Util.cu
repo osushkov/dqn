@@ -53,15 +53,13 @@ void util::DeleteLayerWeights(LayerWeights &lw) {
   lw.weights = nullptr;
 }
 
-SamplesBatch util::NewSamplesBatch(unsigned maxBatchSize, unsigned inputDim,
-                                   unsigned targetOutputDim) {
-  assert(maxBatchSize > 0 && inputDim > 0 && targetOutputDim > 0);
+SamplesBatch util::NewSamplesBatch(unsigned maxBatchSize, unsigned inputDim) {
+  assert(maxBatchSize > 0 && inputDim > 0);
 
   SamplesBatch result;
   result.maxBatchSize = maxBatchSize;
   result.batchSize = 0;
   result.inputDim = inputDim;
-  result.targetOutputDim = targetOutputDim;
 
   size_t width = inputDim * sizeof(float);
   size_t height = maxBatchSize;
@@ -69,8 +67,10 @@ SamplesBatch util::NewSamplesBatch(unsigned maxBatchSize, unsigned inputDim,
   cudaError_t err = cudaMallocPitch(&result.input, &result.ipitch, width, height);
   CheckError(err);
 
-  width = targetOutputDim * sizeof(float);
-  err = cudaMallocPitch(&result.targetOutput, &result.opitch, width, height);
+  err = cudaMalloc(&result.targetOutput, height * sizeof(float));
+  CheckError(err);
+
+  err = cudaMalloc(&result.outputIndex, height * sizeof(unsigned));
   CheckError(err);
 
   return result;
@@ -84,6 +84,10 @@ void util::DeleteSamplesBatch(SamplesBatch &sb) {
   err = cudaFree(sb.targetOutput);
   CheckError(err);
   sb.targetOutput = nullptr;
+
+  err = cudaFree(sb.outputIndex);
+  CheckError(err);
+  sb.outputIndex = nullptr;
 }
 
 LayerBatchOutputs util::NewLayerBatchOutputs(unsigned maxBatchSize, unsigned layerSize) {

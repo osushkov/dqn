@@ -4,6 +4,7 @@
 #include "../../math/MatrixView.hpp"
 #include "../NetworkSpec.hpp"
 #include <memory>
+#include <vector>
 
 namespace neuralnetwork {
 namespace cuda {
@@ -16,7 +17,8 @@ public:
   void SetWeights(const std::vector<math::MatrixView> &weights);
   void GetWeights(std::vector<math::MatrixView> &outWeights);
 
-  void Train(const math::MatrixView &batchInputs, const math::MatrixView &batchOutputs);
+  void Train(const math::MatrixView &batchInputs, const std::vector<float> &targetOutputs,
+             const std::vector<unsigned> &targetOutputIndices);
 
 private:
   struct CudaNetworkImpl;

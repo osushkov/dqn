@@ -24,6 +24,9 @@ public:
   GameAction SelectLearningAction(const GameState *state, const EVector &encodedState);
   void Learn(const vector<ExperienceMoment> &moments);
 
+  // This is for debugging.
+  float GetQValue(const GameState &state, const GameAction &action) const;
+
 private:
   struct LearningAgentImpl;
   uptr<LearningAgentImpl> impl;

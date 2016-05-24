@@ -67,28 +67,28 @@ struct Network::NetworkImpl {
     assert(samplesProvider.NumSamples() <= spec.maxBatchSize);
 
     EMatrix input(samplesProvider.NumSamples(), spec.numInputs);
-    EMatrix output(samplesProvider.NumSamples(), spec.numOutputs);
+
+    std::vector<float> targetOutputs(samplesProvider.NumSamples());
+    std::vector<unsigned> outputIndices(samplesProvider.NumSamples());
 
     for (unsigned i = 0; i < samplesProvider.NumSamples(); i++) {
       const TrainingSample &sample = samplesProvider[i];
 
+      assert(sample.outputIndex < spec.numOutputs);
       assert(sample.input.cols() == 1 && sample.input.rows() == spec.numInputs);
-      assert(sample.expectedOutput.cols() == 1 && sample.expectedOutput.rows() == spec.numOutputs);
 
       for (unsigned j = 0; j < sample.input.rows(); j++) {
         input(i, j) = sample.input(j);
       }
 
-      for (unsigned j = 0; j < sample.expectedOutput.rows(); j++) {
-        output(i, j) = sample.expectedOutput(j);
-      }
+      targetOutputs[i] = sample.expectedOutput;
+      outputIndices[i] = sample.outputIndex;
     }
 
     math::MatrixView batchInputs = math::GetMatrixView(input);
-    math::MatrixView batchOutputs = math::GetMatrixView(output);
 
     std::lock_guard<std::mutex> lock(trainMutex);
-    cudaNetwork->Train(batchInputs, batchOutputs);
+    cudaNetwork->Train(batchInputs, targetOutputs, outputIndices);
   }
 
   uptr<NetworkImpl> ReadOnlyCopy(void) const {

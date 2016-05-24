@@ -6,9 +6,10 @@ namespace neuralnetwork {
 
 struct TrainingSample {
   EVector input;
-  EVector expectedOutput;
+  float expectedOutput;
+  unsigned outputIndex;
 
-  TrainingSample(const EVector &input, const EVector &expectedOutput)
-      : input(input), expectedOutput(expectedOutput) {}
+  TrainingSample(const EVector &input, float expectedOutput, unsigned outputIndex)
+      : input(input), expectedOutput(expectedOutput), outputIndex(outputIndex) {}
 };
 }

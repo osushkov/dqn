@@ -29,23 +29,22 @@ struct SamplesBatch {
   unsigned maxBatchSize; // number of rows allocated in memory.
   unsigned batchSize;    // equal to the number of rows in the matrix.
   unsigned inputDim;     // equal to the number of columns in the matrix.
-  unsigned targetOutputDim;
 
-  float *input; // matrix sized batchSize(rows) * sampleDim(cols)
+  float *input; // matrix sized batchSize(rows) * inputDim(cols)
   size_t ipitch;
 
-  float *targetOutput; // matrix sized batchSize(rows) * sampleDim(cols)
-  size_t opitch;
+  float *targetOutput;   // vector batchSize in length
+  unsigned *outputIndex; // vector batchSize in length
 
   __device__ float *InputElem(unsigned r, unsigned c) {
     assert(r < maxBatchSize && c < inputDim);
     return (float *)((char *)input + r * ipitch) + c;
   }
 
-  __device__ float *TargetOutputElem(unsigned r, unsigned c) {
-    assert(r < maxBatchSize && c < targetOutputDim);
-    return (float *)((char *)targetOutput + r * opitch) + c;
-  }
+  // __device__ float *TargetOutputElem(unsigned r, unsigned c) {
+  //   assert(r < maxBatchSize && c < targetOutputDim);
+  //   return (float *)((char *)targetOutput + r * opitch) + c;
+  // }
 };
 
 struct LayerBatchOutputs {

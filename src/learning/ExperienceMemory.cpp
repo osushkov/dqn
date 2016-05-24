@@ -10,6 +10,19 @@ static constexpr float PURGE_RATIO = 0.2f;
 ExperienceMemory::ExperienceMemory(unsigned maxSize)
     : pastExperiences(maxSize), head(0), tail(0), occupancy(0) {}
 
+void ExperienceMemory::AddExperience(const ExperienceMoment &moment) {
+  // obtain a write lock
+  boost::unique_lock<boost::shared_mutex> lock(smutex);
+
+  pastExperiences[tail] = moment;
+  tail = (tail + 1) % pastExperiences.size();
+  occupancy++;
+
+  if (occupancy == pastExperiences.size()) {
+    purgeOldMemories();
+  }
+}
+
 void ExperienceMemory::AddExperiences(const vector<ExperienceMoment> &moments) {
   // obtain a write lock
   boost::unique_lock<boost::shared_mutex> lock(smutex);

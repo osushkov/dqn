@@ -23,6 +23,7 @@ public:
   ExperienceMemory(ExperienceMemory &&other) = delete;
   ExperienceMemory &operator=(const ExperienceMemory &other) = delete;
 
+  void AddExperience(const ExperienceMoment &moment);
   void AddExperiences(const vector<ExperienceMoment> &moments);
   vector<ExperienceMoment> Sample(unsigned numSamples) const;
 

@@ -11,10 +11,12 @@ GameState::GameState() : numTokensOnBoard(0) {
   colHeights.fill(0);
 }
 
-GameState::GameState(const GameState &other) : cells(other.cells), colHeights(other.colHeights) {}
+GameState::GameState(const GameState &other)
+    : cells(other.cells), colHeights(other.colHeights), numTokensOnBoard(other.numTokensOnBoard) {}
 
 GameState::GameState(GameState &&other)
-    : cells(move(other.cells)), colHeights(move(other.colHeights)) {}
+    : cells(move(other.cells)), colHeights(move(other.colHeights)),
+      numTokensOnBoard(other.numTokensOnBoard) {}
 
 GameState &GameState::operator=(const GameState &other) {
   this->cells = other.cells;

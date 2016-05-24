@@ -33,13 +33,6 @@ std::vector<GameAction> GameAction::ACTIONS(std::vector<unsigned> indices) {
 }
 
 unsigned GameAction::ACTION_INDEX(const GameAction &ga) {
-  const auto &aa = ALL_ACTIONS();
-  for (unsigned i = 0; i < aa.size(); i++) {
-    if (ga == aa[i]) {
-      return i;
-    }
-  }
-
-  assert(false);
-  return 0;
+  assert(ga.GetColumn() < BOARD_WIDTH);
+  return ga.GetColumn();
 }

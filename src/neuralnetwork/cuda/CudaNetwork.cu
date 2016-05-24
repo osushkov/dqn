@@ -76,9 +76,6 @@ __global__ void initialiseAdamWeights(LayerWeights momentum, LayerWeights rms) {
 
 __global__ void lastLayerDeltasKernel(LayerBatchOutputs networkOutput, SamplesBatch samples,
                                       LayerBatchDeltas out) {
-  assert(networkOutput.layerSize == samples.targetOutputDim + 1);
-  assert(out.layerSize == samples.targetOutputDim);
-
   const unsigned row = blockDim.y * blockIdx.y + threadIdx.y;
   const unsigned col = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -86,9 +83,14 @@ __global__ void lastLayerDeltasKernel(LayerBatchOutputs networkOutput, SamplesBa
     return;
   }
 
-  // TODO: check whether reading into shared mem, doing computation, then writing to global mem
-  // is faster. You never know.
-  *out.Elem(row, col) = *networkOutput.OutputElem(row, col) - *samples.TargetOutputElem(row, col);
+  float delta = 0.0f;
+  if (col == samples.outputIndex[row]) {
+    float out = *networkOutput.OutputElem(row, col);
+    // delta = out * (1.0f - out) * (out - samples.targetOutput[row]);
+    delta = (out - samples.targetOutput[row]);
+  }
+
+  *out.Elem(row, col) = delta;
 }
 
 __global__ void updateMomentumAndRMS(LayerWeights gradient, LayerWeights momentum, LayerWeights rms,
@@ -203,8 +205,15 @@ struct CudaNetwork::CudaNetworkImpl {
     }
   }
 
-  void Train(const math::MatrixView &batchInputs, const math::MatrixView &batchOutputs) {
-    uploadSamplesBatch(batchInputs, batchOutputs);
+  void Train(const math::MatrixView &batchInputs, const std::vector<float> &targetOutputs,
+             const std::vector<unsigned> &targetOutputIndices) {
+
+    // for (unsigned i = 0; i < targetOutputs.size(); i++) {
+    //   std::cout << targetOutputIndices[i] << " : " << targetOutputs[i] << std::endl;
+    // }
+    // std::cout << std::endl;
+
+    uploadSamplesBatch(batchInputs, targetOutputs, targetOutputIndices);
 
     forwardPass();
     backwardPass();
@@ -224,11 +233,12 @@ struct CudaNetwork::CudaNetworkImpl {
 
 private:
   void uploadSamplesBatch(const math::MatrixView &batchInputs,
-                          const math::MatrixView &batchOutputs) {
-    assert(batchInputs.rows == batchOutputs.rows);
+                          const std::vector<float> &batchOutputs,
+                          const std::vector<unsigned> &batchOutputIndices) {
+    assert(batchInputs.rows == batchOutputs.size());
     assert(batchInputs.rows <= d_samplesBatch.maxBatchSize);
     assert(batchInputs.cols == d_samplesBatch.inputDim);
-    assert(batchOutputs.cols == d_samplesBatch.targetOutputDim);
+    assert(batchOutputs.size() == batchOutputIndices.size());
 
     d_samplesBatch.batchSize = batchInputs.rows;
 
@@ -239,11 +249,12 @@ private:
         cudaMemcpyHostToDevice);
     CheckError(err);
 
-    err = cudaMemcpy2D(
-        d_samplesBatch.targetOutput, d_samplesBatch.opitch, // dst
-        batchOutputs.data, batchOutputs.cols * sizeof(float), // src
-        batchOutputs.cols * sizeof(float), batchOutputs.rows, // width, height
-        cudaMemcpyHostToDevice);
+    err = cudaMemcpy(d_samplesBatch.targetOutput, &(batchOutputs[0]),
+        batchOutputs.size() * sizeof(float), cudaMemcpyHostToDevice);
+    CheckError(err);
+
+    err = cudaMemcpy(d_samplesBatch.outputIndex, &(batchOutputIndices[0]),
+        batchOutputIndices.size() * sizeof(unsigned), cudaMemcpyHostToDevice);
     CheckError(err);
   }
 
@@ -398,9 +409,7 @@ private:
       d_adamRMS.push_back(util::NewLayerWeights(prevLayerSize + 1, layerSizes[i]));
     }
 
-    d_samplesBatch =
-        util::NewSamplesBatch(networkSpec.maxBatchSize, networkSpec.numInputs, networkSpec.numOutputs);
-
+    d_samplesBatch = util::NewSamplesBatch(networkSpec.maxBatchSize, networkSpec.numInputs);
     d_transposeScratch = util::NewLayerWeights(maxLayerSize, maxInputSize);
   }
 };
@@ -417,6 +426,8 @@ void CudaNetwork::GetWeights(std::vector<math::MatrixView> &outWeights) {
   impl->GetWeights(outWeights);
 }
 
-void CudaNetwork::Train(const math::MatrixView &batchInputs, const math::MatrixView &batchOutputs) {
-  impl->Train(batchInputs, batchOutputs);
+void CudaNetwork::Train(const math::MatrixView &batchInputs,
+                        const std::vector<float> &targetOutputs,
+                        const std::vector<unsigned> &targetOutputIndices) {
+  impl->Train(batchInputs, targetOutputs, targetOutputIndices);
 }

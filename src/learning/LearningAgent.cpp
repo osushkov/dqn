@@ -19,10 +19,10 @@ struct LearningAgent::LearningAgentImpl {
 
   LearningAgentImpl() : pRandom(0.0f) {
     neuralnetwork::NetworkSpec spec;
-    spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT;
+    spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
-    spec.hiddenLayers = {spec.numInputs, spec.numInputs / 2};
-    spec.hiddenActivation = neuralnetwork::LayerActivation::TANH;
+    spec.hiddenLayers = {spec.numInputs, spec.numInputs / 2, spec.numInputs / 2};
+    spec.hiddenActivation = neuralnetwork::LayerActivation::LEAKY_RELU;
     spec.outputActivation = neuralnetwork::LayerActivation::TANH;
     spec.maxBatchSize = MOMENTS_BATCH_SIZE;
 
@@ -44,7 +44,7 @@ struct LearningAgent::LearningAgentImpl {
   GameAction SelectLearningAction(const GameState *state, const EVector &encodedState) {
     assert(state != nullptr);
     if (Util::RandInterval(0.0, 1.0) < pRandom) {
-      return chooseExplorativeAction(encodedState);
+      return chooseExplorativeAction(*state);
     } else {
       return chooseBestAction(encodedState);
     }
@@ -62,10 +62,25 @@ struct LearningAgent::LearningAgentImpl {
 
     for (const auto &moment : moments) {
       float mq = maxQ(moment.successorState);
-      float targetValue = moment.reward + REWARD_DELAY_DISCOUNT * mq;
+
+      float targetValue;
+      if (moment.isSuccessorTerminal) {
+        targetValue = moment.reward;
+      } else {
+        targetValue = moment.reward + REWARD_DELAY_DISCOUNT * mq;
+      }
+      learnSamples.emplace_back(moment.initialState, targetValue,
+                                GameAction::ACTION_INDEX(moment.actionTaken));
     }
 
     learningNet->Update(neuralnetwork::SamplesProvider(learnSamples));
+    itersSinceTargetUpdated++;
+  }
+
+  float GetQValue(const GameState &state, const GameAction &action) const {
+    auto encodedState = LearningAgent::EncodeGameState(&state);
+    EVector qvalues = learningNet->Process(encodedState);
+    return qvalues(GameAction::ACTION_INDEX(action));
   }
 
   float maxQ(const EVector &encodedState) const {
@@ -91,34 +106,34 @@ struct LearningAgent::LearningAgentImpl {
         bestAction = GameAction::ACTION(i);
       }
     }
-
+    // std::cout << "choosing best action: " << bestQValue << std::endl;
     return bestAction;
   }
 
-  GameAction chooseExplorativeAction(const EVector &encodedState) {
-    const auto &actions = GameAction::ALL_ACTIONS();
-    return actions[rand() % actions.size()];
+  GameAction chooseExplorativeAction(const GameState &state) {
+    // std::cout << "choosing random" << std::endl;
+    auto aa = state.AvailableActions();
+    return GameAction::ACTION(aa[rand() % aa.size()]);
   }
 };
 
 EVector LearningAgent::EncodeGameState(const GameState *state) {
-  EVector result(BOARD_WIDTH * BOARD_HEIGHT);
+  EVector result(2 * BOARD_WIDTH * BOARD_HEIGHT);
+  result.fill(0.0f);
 
-  unsigned ri = 0;
   for (unsigned r = 0; r < BOARD_HEIGHT; r++) {
     for (unsigned c = 0; c < BOARD_WIDTH; c++) {
+      unsigned ri = 2 * (c + r * BOARD_WIDTH);
+
       switch (state->GetCell(r, c)) {
-      case CellState::EMPTY:
-        result(ri) = 0.0f;
-        break;
       case CellState::MY_TOKEN:
         result(ri) = 1.0f;
         break;
       case CellState::OPPONENT_TOKEN:
-        result(ri) = -1.0f;
+        result(ri + 1) = 1.0f;
         break;
       default:
-        assert(false);
+        break;
       }
 
       ri++;
@@ -127,6 +142,35 @@ EVector LearningAgent::EncodeGameState(const GameState *state) {
 
   return result;
 }
+
+// EVector LearningAgent::EncodeGameState(const GameState *state) {
+//   EVector result(BOARD_WIDTH * BOARD_HEIGHT * 2);
+//   result.fill(0.0f)
+//
+//   for (unsigned r = 0; r < BOARD_HEIGHT; r++) {
+//     for (unsigned c = 0; c < BOARD_WIDTH; c++) {
+//       unsigned ri = 0;
+//
+//       switch (state->GetCell(r, c)) {
+//       case CellState::EMPTY:
+//         result(ri) = 0.0f;
+//         break;
+//       case CellState::MY_TOKEN:
+//         result(ri) = 1.0f;
+//         break;
+//       case CellState::OPPONENT_TOKEN:
+//         result(ri) = -1.0f;
+//         break;
+//       default:
+//         assert(false);
+//       }
+//
+//       ri++;
+//     }
+//   }
+//
+//   return result;
+// }
 
 LearningAgent::LearningAgent() : impl(new LearningAgentImpl()) {}
 LearningAgent::~LearningAgent() = default;
@@ -141,3 +185,7 @@ GameAction LearningAgent::SelectLearningAction(const GameState *state,
 }
 
 void LearningAgent::Learn(const vector<ExperienceMoment> &moments) { impl->Learn(moments); }
+
+float LearningAgent::GetQValue(const GameState &state, const GameAction &action) const {
+  return impl->GetQValue(state, action);
+}
