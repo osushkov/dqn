@@ -13,13 +13,12 @@ using namespace learning;
 
 struct LearningAgent::LearningAgentImpl {
   float pRandom;
-  float maxQTemperature;
 
   uptr<neuralnetwork::Network> learningNet;
   uptr<neuralnetwork::Network> targetNet;
   unsigned itersSinceTargetUpdated = 0;
 
-  LearningAgentImpl() : pRandom(0.0f), maxQTemperature(0.0001f) {
+  LearningAgentImpl() : pRandom(0.0f) {
     neuralnetwork::NetworkSpec spec;
     spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
@@ -43,11 +42,6 @@ struct LearningAgent::LearningAgentImpl {
     this->pRandom = pRandom;
   }
 
-  void SetMaxQTemperature(float temp) {
-    assert(temp > 0.0f);
-    maxQTemperature = temp;
-  }
-
   GameAction SelectLearningAction(const GameState *state, const EVector &encodedState) {
     assert(state != nullptr);
     if (Util::RandInterval(0.0, 1.0) < pRandom) {
@@ -68,16 +62,20 @@ struct LearningAgent::LearningAgentImpl {
     learnSamples.reserve(moments.size());
 
     for (const auto &moment : moments) {
-      float mq = maxQ(moment.successorState);
+      learnSamples.emplace_back(moment.initialState, moment.successorState,
+                                GameAction::ACTION_INDEX(moment.actionTaken),
+                                moment.isSuccessorTerminal, moment.reward, REWARD_DELAY_DISCOUNT);
 
-      float targetValue;
-      if (moment.isSuccessorTerminal) {
-        targetValue = moment.reward;
-      } else {
-        targetValue = moment.reward + REWARD_DELAY_DISCOUNT * mq;
-      }
-      learnSamples.emplace_back(moment.initialState, targetValue,
-                                GameAction::ACTION_INDEX(moment.actionTaken));
+      // float mq = maxQ(moment.successorState);
+      //
+      // float targetValue;
+      // if (moment.isSuccessorTerminal) {
+      //   targetValue = moment.reward;
+      // } else {
+      //   targetValue = moment.reward + REWARD_DELAY_DISCOUNT * mq;
+      // }
+      // learnSamples.emplace_back(moment.initialState, targetValue,
+      //                           GameAction::ACTION_INDEX(moment.actionTaken));
     }
 
     learningNet->Update(neuralnetwork::SamplesProvider(learnSamples));
@@ -92,22 +90,12 @@ struct LearningAgent::LearningAgentImpl {
 
   float maxQ(const EVector &encodedState) const {
     EVector qa = targetNet->Process(encodedState);
-    std::vector<float> qvals(qa.rows());
 
-    for (unsigned i = 0; i < qvals.size(); i++) {
-      qvals[i] = qa(i);
+    float maxVal = qa(0);
+    for (int i = 1; i < qa.rows(); i++) {
+      maxVal = max(maxVal, qa(i));
     }
-
-    return Util::SoftmaxWeightedAverage(qvals, maxQTemperature);
-
-    // float maxVal = qa(0);
-    // for (int i = 1; i < qa.rows(); i++) {
-    //   maxVal = max(maxVal, qa(i));
-    // }
-    //
-    // return maxVal;
-    // std::cout << wa << " : " << maxVal << std::endl;
-    // return wa;
+    return maxVal;
   }
 
   GameAction chooseBestAction(const EVector &encodedState) {
@@ -195,7 +183,6 @@ LearningAgent::~LearningAgent() = default;
 GameAction LearningAgent::SelectAction(const GameState *state) { return impl->SelectAction(state); }
 
 void LearningAgent::SetPRandom(float pRandom) { impl->SetPRandom(pRandom); }
-void LearningAgent::SetMaxQTemperature(float temp) { impl->SetMaxQTemperature(temp); }
 
 GameAction LearningAgent::SelectLearningAction(const GameState *state,
                                                const EVector &encodedState) {

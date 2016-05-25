@@ -67,10 +67,19 @@ SamplesBatch util::NewSamplesBatch(unsigned maxBatchSize, unsigned inputDim) {
   cudaError_t err = cudaMallocPitch(&result.input, &result.ipitch, width, height);
   CheckError(err);
 
-  err = cudaMalloc(&result.targetOutput, height * sizeof(float));
+  err = cudaMallocPitch(&result.qinput, &result.qpitch, width, height);
   CheckError(err);
 
-  err = cudaMalloc(&result.outputIndex, height * sizeof(unsigned));
+  err = cudaMalloc(&result.actionIndex, height * sizeof(unsigned));
+  CheckError(err);
+
+  err = cudaMalloc(&result.rewards, height * sizeof(float));
+  CheckError(err);
+
+  err = cudaMalloc(&result.isTerminal, height * sizeof(char));
+  CheckError(err);
+
+  err = cudaMalloc(&result.targetOutput, height * sizeof(float));
   CheckError(err);
 
   return result;
@@ -81,13 +90,25 @@ void util::DeleteSamplesBatch(SamplesBatch &sb) {
   CheckError(err);
   sb.input = nullptr;
 
+  err = cudaFree(sb.qinput);
+  CheckError(err);
+  sb.qinput = nullptr;
+
+  err = cudaFree(sb.actionIndex);
+  CheckError(err);
+  sb.actionIndex = nullptr;
+
+  err = cudaFree(sb.rewards);
+  CheckError(err);
+  sb.rewards = nullptr;
+
+  err = cudaFree(sb.isTerminal);
+  CheckError(err);
+  sb.isTerminal = nullptr;
+
   err = cudaFree(sb.targetOutput);
   CheckError(err);
   sb.targetOutput = nullptr;
-
-  err = cudaFree(sb.outputIndex);
-  CheckError(err);
-  sb.outputIndex = nullptr;
 }
 
 LayerBatchOutputs util::NewLayerBatchOutputs(unsigned maxBatchSize, unsigned layerSize) {

@@ -1,6 +1,7 @@
 
 #include "Trainer.hpp"
 #include "common/Common.hpp"
+#include "common/Timer.hpp"
 #include "connectfour/GameAction.hpp"
 #include "connectfour/GameRules.hpp"
 #include "connectfour/GameState.hpp"
@@ -50,6 +51,7 @@ struct PlayoutAgent {
 struct Trainer::TrainerImpl {
   vector<ProgressCallback> callbacks;
   atomic<unsigned> numLearnIters;
+  unsigned movesConsideredCounter;
 
   void AddProgressCallback(ProgressCallback callback) { callbacks.push_back(callback); }
 
@@ -59,9 +61,17 @@ struct Trainer::TrainerImpl {
 
     numLearnIters = 0;
     std::thread playoutThread([this, iters, &experienceMemory, &agent]() {
+      movesConsideredCounter = 0;
+      Timer timer;
+      timer.Start();
+
       while (numLearnIters.load() < iters) {
         this->playoutRound(agent.get(), experienceMemory.get());
       }
+
+      timer.Stop();
+      std::cout << "playout per second: " << (movesConsideredCounter / timer.GetNumElapsedSeconds())
+                << std::endl;
     });
 
     std::thread learnThread([this, iters, &experienceMemory, &agent]() {
@@ -69,26 +79,26 @@ struct Trainer::TrainerImpl {
       float pRandDecay = powf(TARGET_PRANDOM / INITIAL_PRANDOM, 1.0f / iters);
       assert(pRandDecay > 0.0f && pRandDecay < 1.0f);
 
-      float temperature = INITIAL_MAXQ_TEMPERATURE;
-      float tempDecay = powf(0.001f / INITIAL_MAXQ_TEMPERATURE, 1.0f / iters);
-      assert(tempDecay > 0.0f && tempDecay < 1.0f);
-
       while (experienceMemory->NumMemories() < 100) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
       }
+
+      Timer timer;
+      timer.Start();
 
       for (unsigned i = 0; i < iters; i++) {
         // if (i % 100 == 0) {
         //   std::cout << i << std::endl;
         // }
-        agent->SetPRandom(pRandom);
-        agent->SetMaxQTemperature(temperature);
+        agent->SetPRandom(pRandom); // TODO: this should be synted with the other thread.
         agent->Learn(experienceMemory->Sample(MOMENTS_BATCH_SIZE));
-
         pRandom *= pRandDecay;
-        temperature *= tempDecay;
       }
       numLearnIters.store(iters);
+
+      timer.Stop();
+      std::cout << "learn iters per second: " << (iters / timer.GetNumElapsedSeconds())
+                << std::endl;
     });
 
     playoutThread.join();
@@ -110,6 +120,7 @@ struct Trainer::TrainerImpl {
       PlayoutAgent &otherPlayer = opponents[(curPlayerIndex + 1) % opponents.size()];
 
       EVector encodedState = LearningAgent::EncodeGameState(&curState);
+      movesConsideredCounter++;
       GameAction action = curPlayer.agent->SelectLearningAction(&curState, encodedState);
 
       if (curPlayer.havePreviousState()) {

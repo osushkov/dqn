@@ -59,6 +59,7 @@ struct Network::NetworkImpl {
     for (unsigned i = 0; i < layerWeights.NumLayers(); i++) {
       weightViews.push_back(math::GetMatrixView(layerWeights(i)));
     }
+    cudaNetwork->UpdateTarget();
     cudaNetwork->GetWeights(weightViews);
   }
 
@@ -66,29 +67,37 @@ struct Network::NetworkImpl {
     assert(cudaNetwork != nullptr);
     assert(samplesProvider.NumSamples() <= spec.maxBatchSize);
 
-    EMatrix input(samplesProvider.NumSamples(), spec.numInputs);
+    cuda::QBatch qbatch;
+    qbatch.actionsTaken = std::vector<unsigned>(samplesProvider.NumSamples());
+    qbatch.isEndStateTerminal = std::vector<char>(samplesProvider.NumSamples());
+    qbatch.rewardsGained = std::vector<float>(samplesProvider.NumSamples());
 
-    std::vector<float> targetOutputs(samplesProvider.NumSamples());
-    std::vector<unsigned> outputIndices(samplesProvider.NumSamples());
+    EMatrix initialStates(samplesProvider.NumSamples(), spec.numInputs);
+    EMatrix successorStates(samplesProvider.NumSamples(), spec.numInputs);
 
     for (unsigned i = 0; i < samplesProvider.NumSamples(); i++) {
       const TrainingSample &sample = samplesProvider[i];
 
-      assert(sample.outputIndex < spec.numOutputs);
-      assert(sample.input.cols() == 1 && sample.input.rows() == spec.numInputs);
+      assert(sample.startState.cols() == 1 && sample.startState.rows() == spec.numInputs);
+      assert(sample.endState.cols() == 1 && sample.endState.rows() == spec.numInputs);
+      assert(sample.actionTaken < spec.numOutputs);
 
-      for (unsigned j = 0; j < sample.input.rows(); j++) {
-        input(i, j) = sample.input(j);
+      for (unsigned j = 0; j < sample.startState.rows(); j++) {
+        initialStates(i, j) = sample.startState(j);
+        successorStates(i, j) = sample.endState(j);
       }
 
-      targetOutputs[i] = sample.expectedOutput;
-      outputIndices[i] = sample.outputIndex;
+      qbatch.actionsTaken[i] = sample.actionTaken;
+      qbatch.isEndStateTerminal[i] = static_cast<char>(sample.isEndStateTerminal);
+      qbatch.rewardsGained[i] = sample.rewardGained;
+      qbatch.futureRewardDiscount = sample.futureRewardDiscount;
     }
 
-    math::MatrixView batchInputs = math::GetMatrixView(input);
+    qbatch.initialStates = math::GetMatrixView(initialStates);
+    qbatch.successorStates = math::GetMatrixView(successorStates);
 
     std::lock_guard<std::mutex> lock(trainMutex);
-    cudaNetwork->Train(batchInputs, targetOutputs, outputIndices);
+    cudaNetwork->Train(qbatch);
   }
 
   uptr<NetworkImpl> ReadOnlyCopy(void) const {

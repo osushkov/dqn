@@ -21,7 +21,6 @@ public:
   GameAction SelectAction(const GameState *state) override;
 
   void SetPRandom(float pRandom);
-  void SetMaxQTemperature(float temp);
 
   GameAction SelectLearningAction(const GameState *state, const EVector &encodedState);
   void Learn(const vector<ExperienceMoment> &moments);

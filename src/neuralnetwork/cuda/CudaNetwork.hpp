@@ -9,6 +9,16 @@
 namespace neuralnetwork {
 namespace cuda {
 
+struct QBatch {
+  math::MatrixView initialStates;
+  math::MatrixView successorStates;
+  std::vector<unsigned> actionsTaken;
+  std::vector<char> isEndStateTerminal;
+  std::vector<float> rewardsGained;
+
+  float futureRewardDiscount;
+};
+
 class CudaNetwork {
 public:
   CudaNetwork(const NetworkSpec &spec);
@@ -17,8 +27,11 @@ public:
   void SetWeights(const std::vector<math::MatrixView> &weights);
   void GetWeights(std::vector<math::MatrixView> &outWeights);
 
-  void Train(const math::MatrixView &batchInputs, const std::vector<float> &targetOutputs,
-             const std::vector<unsigned> &targetOutputIndices);
+  void UpdateTarget(void);
+  void Train(const QBatch &qbatch);
+
+  // math::MatrixView &batchInputs, const std::vector<float> &targetOutputs,
+  //            const std::vector<unsigned> &targetOutputIndices);
 
 private:
   struct CudaNetworkImpl;

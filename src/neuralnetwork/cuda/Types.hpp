@@ -29,16 +29,29 @@ struct SamplesBatch {
   unsigned maxBatchSize; // number of rows allocated in memory.
   unsigned batchSize;    // equal to the number of rows in the matrix.
   unsigned inputDim;     // equal to the number of columns in the matrix.
+  float futureRewardDiscount;
 
   float *input; // matrix sized batchSize(rows) * inputDim(cols)
   size_t ipitch;
 
-  float *targetOutput;   // vector batchSize in length
-  unsigned *outputIndex; // vector batchSize in length
+  float *qinput; // matrix sized batchSize(rows) * inputDim(cols)
+  size_t qpitch;
+
+  unsigned *actionIndex; // vector batchSize in length
+  float *rewards;        // length = batchSize
+  char *isTerminal;      // length = batchSize
+
+  // targetOutput has to be calculated first.
+  float *targetOutput; // vector batchSize in length
 
   __device__ float *InputElem(unsigned r, unsigned c) {
     assert(r < maxBatchSize && c < inputDim);
     return (float *)((char *)input + r * ipitch) + c;
+  }
+
+  __device__ float *QElem(unsigned r, unsigned c) {
+    assert(r < maxBatchSize && c < inputDim);
+    return (float *)((char *)qinput + r * ipitch) + c;
   }
 
   // __device__ float *TargetOutputElem(unsigned r, unsigned c) {
