@@ -231,15 +231,13 @@ struct CudaNetwork::CudaNetworkImpl {
 
     uploadSamplesBatch(qbatch);
 
-    cudaStreamSynchronize(computeStream[otherStream]);
+    // cudaStreamSynchronize(computeStream[otherStream]);
 
     calculateTargets();
     forwardPass();
     backwardPass();
     updateAdamParams();
     updateWeights();
-
-    cudaStreamSynchronize(computeStream[curStream]);
 
     curStream = 1 - curStream;
     otherStream = 1 - otherStream;

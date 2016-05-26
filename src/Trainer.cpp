@@ -87,8 +87,9 @@ struct Trainer::TrainerImpl {
         agent->SetPRandom(pRandom); // TODO: this should be synted with the other thread.
         agent->Learn(experienceMemory->Sample(MOMENTS_BATCH_SIZE));
         pRandom *= pRandDecay;
+
+        numLearnIters++;
       }
-      numLearnIters.store(iters);
 
       timer.Stop();
       std::cout << "learn iters per second: " << (iters / timer.GetNumElapsedSeconds())

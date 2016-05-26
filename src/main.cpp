@@ -16,7 +16,7 @@ using namespace learning;
 using namespace connectfour;
 
 int main(int argc, char **argv) {
-  srand(time(NULL));
+  // srand(time(NULL));
 
   Trainer trainer;
   auto trainedAgent = trainer.TrainAgent(10000);
