@@ -1,10 +1,12 @@
 
 #include "Network.hpp"
+#include "../common/Common.hpp"
 #include "../common/Util.hpp"
 #include "../math/Math.hpp"
 #include "../math/Tensor.hpp"
 #include "Activations.hpp"
 #include "cuda/CudaNetwork.hpp"
+#include "cuda/Memory.hpp"
 
 #include <boost/thread/shared_mutex.hpp>
 #include <cassert>
@@ -22,6 +24,8 @@ struct Network::NetworkImpl {
   math::Tensor layerWeights;
   uptr<cuda::CudaNetwork> cudaNetwork;
 
+  std::vector<cuda::QBatch> inputBatches;
+
   NetworkImpl(const NetworkSpec &spec, bool isTrainable) : spec(spec) {
     assert(spec.numInputs > 0 && spec.numOutputs > 0);
     initialiseWeights();
@@ -31,6 +35,12 @@ struct Network::NetworkImpl {
     } else {
       cudaNetwork = nullptr;
     }
+
+    allocateInputBatches();
+  }
+
+  ~NetworkImpl() {
+    freeInputBatches();
   }
 
   EVector Process(const EVector &input) const {
@@ -49,7 +59,38 @@ struct Network::NetworkImpl {
     return layerOutput;
   }
 
-  void Refresh(void) {
+  void Update(const SamplesProvider &samplesProvider) {
+    assert(cudaNetwork != nullptr);
+    assert(samplesProvider.NumSamples() <= spec.maxBatchSize);
+
+    inputBatches[0].batchSize = samplesProvider.NumSamples();
+    inputBatches[0].initialStates.rows = samplesProvider.NumSamples();
+    inputBatches[0].successorStates.rows = samplesProvider.NumSamples();
+
+    for (unsigned i = 0; i < samplesProvider.NumSamples(); i++) {
+      const TrainingSample &sample = samplesProvider[i];
+
+      assert(sample.startState.cols() == 1 && sample.startState.rows() == spec.numInputs);
+      assert(sample.endState.cols() == 1 && sample.endState.rows() == spec.numInputs);
+      assert(sample.actionTaken < spec.numOutputs);
+
+      for (unsigned j = 0; j < sample.startState.rows(); j++) {
+        unsigned cols = inputBatches[0].initialStates.cols;
+        inputBatches[0].initialStates.data[j + i * cols] = sample.startState(j);
+        inputBatches[0].successorStates.data[j + i * cols] = sample.endState(j);
+      }
+
+      inputBatches[0].actionsTaken[i] = sample.actionTaken;
+      inputBatches[0].isEndStateTerminal[i] = static_cast<char>(sample.isEndStateTerminal);
+      inputBatches[0].rewardsGained[i] = sample.rewardGained;
+      inputBatches[0].futureRewardDiscount = sample.futureRewardDiscount;
+    }
+
+    std::lock_guard<std::mutex> lock(trainMutex);
+    cudaNetwork->Train(inputBatches[0]);
+  }
+
+  uptr<NetworkImpl> RefreshAndGetTarget(void) {
     assert(cudaNetwork != nullptr);
 
     // obtain a write lock
@@ -61,48 +102,6 @@ struct Network::NetworkImpl {
     }
     cudaNetwork->UpdateTarget();
     cudaNetwork->GetWeights(weightViews);
-  }
-
-  void Update(const SamplesProvider &samplesProvider) {
-    assert(cudaNetwork != nullptr);
-    assert(samplesProvider.NumSamples() <= spec.maxBatchSize);
-
-    cuda::QBatch qbatch;
-    qbatch.actionsTaken = std::vector<unsigned>(samplesProvider.NumSamples());
-    qbatch.isEndStateTerminal = std::vector<char>(samplesProvider.NumSamples());
-    qbatch.rewardsGained = std::vector<float>(samplesProvider.NumSamples());
-
-    EMatrix initialStates(samplesProvider.NumSamples(), spec.numInputs);
-    EMatrix successorStates(samplesProvider.NumSamples(), spec.numInputs);
-
-    for (unsigned i = 0; i < samplesProvider.NumSamples(); i++) {
-      const TrainingSample &sample = samplesProvider[i];
-
-      assert(sample.startState.cols() == 1 && sample.startState.rows() == spec.numInputs);
-      assert(sample.endState.cols() == 1 && sample.endState.rows() == spec.numInputs);
-      assert(sample.actionTaken < spec.numOutputs);
-
-      for (unsigned j = 0; j < sample.startState.rows(); j++) {
-        initialStates(i, j) = sample.startState(j);
-        successorStates(i, j) = sample.endState(j);
-      }
-
-      qbatch.actionsTaken[i] = sample.actionTaken;
-      qbatch.isEndStateTerminal[i] = static_cast<char>(sample.isEndStateTerminal);
-      qbatch.rewardsGained[i] = sample.rewardGained;
-      qbatch.futureRewardDiscount = sample.futureRewardDiscount;
-    }
-
-    qbatch.initialStates = math::GetMatrixView(initialStates);
-    qbatch.successorStates = math::GetMatrixView(successorStates);
-
-    std::lock_guard<std::mutex> lock(trainMutex);
-    cudaNetwork->Train(qbatch);
-  }
-
-  uptr<NetworkImpl> ReadOnlyCopy(void) const {
-    // obtain a read lock
-    boost::shared_lock<boost::shared_mutex> lock(rwMutex);
 
     auto result = make_unique<NetworkImpl>(spec, false);
     result->layerWeights = layerWeights;
@@ -196,18 +195,49 @@ struct Network::NetworkImpl {
 
     return result;
   }
+
+  void allocateInputBatches(void) {
+    for (unsigned i = 0; i < 2; i++) {
+      cuda::QBatch batch;
+      batch.actionsTaken = (unsigned *) cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(unsigned));
+      batch.isEndStateTerminal = (char *) cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(char));
+      batch.rewardsGained = (float *)cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(float));
+
+      size_t mbufSize = spec.maxBatchSize * spec.numInputs * sizeof(float);
+
+      batch.initialStates.rows = spec.maxBatchSize;
+      batch.initialStates.cols = spec.numInputs;
+      batch.initialStates.data = (float* ) cuda::memory::AllocPushBuffer(mbufSize);
+
+      batch.successorStates.rows = spec.maxBatchSize;
+      batch.successorStates.cols = spec.numInputs;
+      batch.successorStates.data = (float *) cuda::memory::AllocPushBuffer(mbufSize);
+
+      inputBatches.push_back(batch);
+    }
+  }
+
+  void freeInputBatches(void) {
+    for (const auto &batch : inputBatches) {
+      cuda::memory::FreePushBuffer(batch.actionsTaken);
+      cuda::memory::FreePushBuffer(batch.isEndStateTerminal);
+      cuda::memory::FreePushBuffer(batch.rewardsGained);
+
+      cuda::memory::FreePushBuffer(batch.initialStates.data);
+      cuda::memory::FreePushBuffer(batch.successorStates.data);
+    }
+  }
 };
 
 Network::Network(const NetworkSpec &spec) : impl(new NetworkImpl(spec, true)) {}
 Network::~Network() = default;
 
 EVector Network::Process(const EVector &input) const { return impl->Process(input); }
-void Network::Refresh(void) { impl->Refresh(); }
 void Network::Update(const SamplesProvider &samplesProvider) { impl->Update(samplesProvider); }
 
-uptr<Network> Network::ReadOnlyCopy(void) const {
+uptr<Network> Network::RefreshAndGetTarget(void) {
   // Its a bit annoying I cant used make_unique coz of the private constructor...
   uptr<Network> roNetwork(new Network());
-  roNetwork->impl = impl->ReadOnlyCopy();
+  roNetwork->impl = impl->RefreshAndGetTarget();
   return roNetwork;
 }

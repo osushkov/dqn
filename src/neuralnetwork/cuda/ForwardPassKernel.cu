@@ -93,8 +93,9 @@ __global__ void forwardPassKernel(LayerWeights lw, LayerBatchOutputs prevOutputs
     float *outElem = out.OutputElem(row, col);
     float *dElem = out.DerivativeElem(row, col);
 
-    *outElem = activationValue(sum, activation);
-    *dElem = activationDerivative(sum, *outElem, activation);
+    float av = activationValue(sum, activation);
+    *outElem = av;
+    *dElem = activationDerivative(sum, av, activation);
   }
 }
 

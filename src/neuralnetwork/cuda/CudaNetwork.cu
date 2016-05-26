@@ -33,6 +33,8 @@ static constexpr float adamLearnRate = 0.001f;
 static Random rnd;
 static std::once_flag stateFlag;
 
+static constexpr unsigned NUM_BUFFERS = 2;
+
 static void initialiseSharedState(void) {
   std::call_once(stateFlag, [](){
     rnd = Random::Create(2048, 1337);
@@ -131,13 +133,10 @@ __global__ void updateWeightsWithAdam(LayerWeights weights, LayerWeights momentu
 struct CudaNetwork::CudaNetworkImpl {
   NetworkSpec networkSpec;
   vector<LayerWeights> d_layerWeights;
-  vector<LayerWeights> d_layerWeightsBridge;
   vector<LayerWeights> d_targetLayerWeights;
   vector<LayerWeights> d_layerGradients;
   vector<LayerBatchOutputs> d_layerOutputs;
   vector<LayerBatchDeltas> d_layerDeltas;
-  SamplesBatch d_samplesBatch;
-
   LayerWeights d_transposeScratch;
 
   // TODO: this stuff should go into a separate file. Trainer code/variables should be
@@ -145,15 +144,22 @@ struct CudaNetwork::CudaNetworkImpl {
   vector<LayerWeights> d_adamMomentum;
   vector<LayerWeights> d_adamRMS;
 
-  cudaStream_t uploadStream;
   cudaStream_t computeStream;
+
+  unsigned curStream = 0;
+  vectpr<SamplesBatch> d_samplesBatch;
+  vector<cudaStream_t> uploadStream;
 
   CudaNetworkImpl(const NetworkSpec &spec) : networkSpec(spec) {
     assert(networkSpec.hiddenActivation != LayerActivation::SOFTMAX);
     initialiseSharedState();
 
-    uploadStream = 0;
-    computeStream = 0;
+    cudaStreamCreate(computeStream);
+
+    uploadStream.resize(numBuffers);
+    for (unsigned i = 0; i < NUM_BUFFERS; i++) {
+      cudaStreamCreate(&uploadStream[i]);
+    }
 
     allocDeviceMemory();
     initialiseWeights();
@@ -163,14 +169,13 @@ struct CudaNetwork::CudaNetworkImpl {
 
   ~CudaNetworkImpl() {
     for (auto& lw : d_layerWeights) { util::DeleteLayerWeights(lw); }
-    for (auto& lw : d_layerWeightsBridge) { util::DeleteLayerWeights(lw); }
     for (auto& lw : d_targetLayerWeights) { util::DeleteLayerWeights(lw); }
     for (auto& lg : d_layerGradients) { util::DeleteLayerWeights(lg); }
     for (auto& lo : d_layerOutputs) { util::DeleteLayerBatchOutputs(lo); }
     for (auto& ld : d_layerDeltas) { util::DeleteLayerBatchDeltas(ld); }
     for (auto& am : d_adamMomentum) { util::DeleteLayerWeights(am); }
     for (auto& am : d_adamRMS) { util::DeleteLayerWeights(am); }
-    util::DeleteSamplesBatch(d_samplesBatch);
+    for (auto& sb : d_samplesBatch) { util::DeleteSamplesBatch(sb); }
     util::DeleteLayerWeights(d_transposeScratch);
   }
 
@@ -200,17 +205,17 @@ struct CudaNetwork::CudaNetworkImpl {
   }
 
   void GetWeights(std::vector<math::MatrixView> &outWeights) {
-    assert(outWeights.size() == d_layerWeightsBridge.size());
+    assert(outWeights.size() == d_targetLayerWeights.size());
 
     for (unsigned i = 0; i < outWeights.size(); i++) {
-      assert(outWeights[i].rows == d_layerWeightsBridge[i].layerSize);
-      assert(outWeights[i].cols == d_layerWeightsBridge[i].inputSize);
+      assert(outWeights[i].rows == d_targetLayerWeights[i].layerSize);
+      assert(outWeights[i].cols == d_targetLayerWeights[i].inputSize);
 
-      cudaError_t err = cudaMemcpy2DAsync(
+      cudaError_t err = cudaMemcpy2D(
           outWeights[i].data, outWeights[i].cols * sizeof(float), // dst
-          d_layerWeightsBridge[i].weights, d_layerWeightsBridge[i].pitch, // src
+          d_targetLayerWeights[i].weights, d_targetLayerWeights[i].pitch, // src
           outWeights[i].cols * sizeof(float), outWeights[i].rows, // width, height
-          cudaMemcpyDeviceToHost, uploadStream);
+          cudaMemcpyDeviceToHost);
 
       CheckError(err);
     }
@@ -234,69 +239,57 @@ struct CudaNetwork::CudaNetworkImpl {
     backwardPass();
     updateAdamParams();
     updateWeights();
-
-    for (unsigned i = 0; i < d_layerWeights.size(); i++) {
-      cudaError_t err = cudaMemcpy2D(
-          d_layerWeightsBridge[i].weights, d_layerWeightsBridge[i].pitch,
-          d_layerWeights[i].weights, d_layerWeights[i].pitch,
-          d_layerWeights[i].inputSize * sizeof(float), d_layerWeights[i].layerSize,
-          cudaMemcpyDeviceToDevice);
-
-      CheckError(err);
-    }
   }
 
 private:
   void uploadSamplesBatch(const QBatch &qbatch) {
-    assert(qbatch.initialStates.rows <= d_samplesBatch.maxBatchSize);
+    assert(qbatch.initialStates.rows <= d_samplesBatch[curStream].maxBatchSize);
+    assert(qbatch.initialStates.rows == qbatch.batchSize);
     assert(qbatch.initialStates.rows == qbatch.successorStates.rows);
     assert(qbatch.initialStates.cols == qbatch.successorStates.cols);
-    assert(qbatch.initialStates.rows == qbatch.actionsTaken.size());
-    assert(qbatch.initialStates.rows == qbatch.isEndStateTerminal.size());
-    assert(qbatch.initialStates.rows == qbatch.rewardsGained.size());
-    assert(qbatch.initialStates.cols == d_samplesBatch.inputDim);
+    assert(qbatch.initialStates.cols == d_samplesBatch[curStream].inputDim);
 
-    d_samplesBatch.batchSize = qbatch.initialStates.rows;
-    d_samplesBatch.futureRewardDiscount = qbatch.futureRewardDiscount;
+    d_samplesBatch[curStream].batchSize = qbatch.batchSize;
+    d_samplesBatch[curStream].futureRewardDiscount = qbatch.futureRewardDiscount;
 
-    cudaError_t err = cudaMemcpy2D(
-        d_samplesBatch.input, d_samplesBatch.ipitch, // dst
+    cudaError_t err = cudaMemcpy2DAsync(
+        d_samplesBatch[curStream].input, d_samplesBatch[curStream].ipitch, // dst
         qbatch.initialStates.data, qbatch.initialStates.cols * sizeof(float), // src
         qbatch.initialStates.cols * sizeof(float), qbatch.initialStates.rows, // width, height
-        cudaMemcpyHostToDevice);
+        cudaMemcpyHostToDevice, uploadStream[curStream]);
     CheckError(err);
 
-    err = cudaMemcpy2D(
-        d_samplesBatch.qinput, d_samplesBatch.qpitch, // dst
+    err = cudaMemcpy2DAsync(
+        d_samplesBatch[curStream].qinput, d_samplesBatch[curStream].qpitch, // dst
         qbatch.successorStates.data, qbatch.successorStates.cols * sizeof(float), // src
         qbatch.successorStates.cols * sizeof(float), qbatch.successorStates.rows, // width, height
-        cudaMemcpyHostToDevice);
+        cudaMemcpyHostToDevice, uploadStream[curStream]);
     CheckError(err);
 
-    err = cudaMemcpy(d_samplesBatch.actionIndex, &(qbatch.actionsTaken[0]),
-        qbatch.actionsTaken.size() * sizeof(unsigned), cudaMemcpyHostToDevice);
+    err = cudaMemcpyAsync(d_samplesBatch[curStream].actionIndex, qbatch.actionsTaken,
+        qbatch.batchSize * sizeof(unsigned), cudaMemcpyHostToDevice, uploadStream[curStream]);
     CheckError(err);
 
-    err = cudaMemcpy(d_samplesBatch.rewards, &(qbatch.rewardsGained[0]),
-        qbatch.rewardsGained.size() * sizeof(float), cudaMemcpyHostToDevice);
+    err = cudaMemcpyAsync(d_samplesBatch[curStream].rewards, qbatch.rewardsGained,
+        qbatch.batchSize * sizeof(float), cudaMemcpyHostToDevice, uploadStream[curStream]);
     CheckError(err);
 
-    err = cudaMemcpy(d_samplesBatch.isTerminal, &(qbatch.isEndStateTerminal[0]),
-        qbatch.isEndStateTerminal.size() * sizeof(char), cudaMemcpyHostToDevice);
+    err = cudaMemcpyAsync(d_samplesBatch[curStream].isTerminal, qbatch.isEndStateTerminal,
+        qbatch.batchSize * sizeof(char), cudaMemcpyHostToDevice, uploadStream[curStream]);
     CheckError(err);
   }
 
   void calculateTargets(void) {
     for (auto& lo : d_layerOutputs) {
-      lo.batchSize = d_samplesBatch.batchSize;
+      lo.batchSize = d_samplesBatch[curStream].batchSize;
     }
 
     // copy the batch inputs into the first layer outputs.
     cudaError_t err = cudaMemcpy2DAsync(
         d_layerOutputs[0].output, d_layerOutputs[0].opitch, // dst
-        d_samplesBatch.qinput, d_samplesBatch.qpitch,        // src
-        d_samplesBatch.inputDim * sizeof(float), d_samplesBatch.batchSize, // width, height
-        cudaMemcpyDeviceToDevice, computeStream);
+        d_samplesBatch[curStream].qinput, d_samplesBatch[curStream].qpitch,        // src
+        d_samplesBatch[curStream].inputDim * sizeof(float), d_samplesBatch[curStream].batchSize, // width, height
+        cudaMemcpyDeviceToDevice, uploadStream[curStream]);
     CheckError(err);
 
     for (unsigned i = 1; i < d_layerOutputs.size(); i++) {
@@ -308,19 +301,19 @@ private:
     }
 
     LayerBatchOutputs lastLayer = d_layerOutputs[d_layerOutputs.size() - 1];
-    TargetValuesKernel::Apply(lastLayer, d_samplesBatch, computeStream);
+    TargetValuesKernel::Apply(lastLayer, d_samplesBatch[curStream], computeStream);
   }
 
   void forwardPass(void) {
     for (auto& lo : d_layerOutputs) {
-      lo.batchSize = d_samplesBatch.batchSize;
+      lo.batchSize = d_samplesBatch[curStream].batchSize;
     }
 
     // copy the batch inputs into the first layer outputs.
     cudaError_t err = cudaMemcpy2DAsync(
         d_layerOutputs[0].output, d_layerOutputs[0].opitch, // dst
-        d_samplesBatch.input, d_samplesBatch.ipitch,        // src
-        d_samplesBatch.inputDim * sizeof(float), d_samplesBatch.batchSize, // width, height
+        d_samplesBatch[curStream].input, d_samplesBatch[curStream].ipitch,        // src
+        d_samplesBatch[curStream].inputDim * sizeof(float), d_samplesBatch[curStream].batchSize, // width, height
         cudaMemcpyDeviceToDevice, computeStream);
     CheckError(err);
 
@@ -345,7 +338,7 @@ private:
 
   void generateLayerDeltas(void) {
     for (auto& ld : d_layerDeltas) {
-      ld.batchSize = d_samplesBatch.batchSize;
+      ld.batchSize = d_samplesBatch[curStream].batchSize;
     }
 
     LayerBatchDeltas lastLayerDeltas = d_layerDeltas[d_layerDeltas.size() - 1];
@@ -354,8 +347,8 @@ private:
     int bpgX = (lastLayerDeltas.layerSize + TPB_X - 1) / TPB_X;
     int bpgY = (lastLayerDeltas.batchSize + TPB_Y - 1) / TPB_Y;
 
-    lastLayerDeltasKernel<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1)>>>(
-        networkOutput, d_samplesBatch, lastLayerDeltas);
+    lastLayerDeltasKernel<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1), 0, computeStream>>>(
+        networkOutput, d_samplesBatch[curStream], lastLayerDeltas);
 
     for (int i = d_layerDeltas.size() - 2; i >= 0; i--) {
       LayerWeights transposedWeights;
@@ -382,7 +375,7 @@ private:
       int bpgX = (d_layerGradients[i].inputSize + TPB_X - 1) / TPB_X;
       int bpgY = (d_layerGradients[i].layerSize + TPB_Y - 1) / TPB_Y;
 
-      updateMomentumAndRMS<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1)>>>(
+      updateMomentumAndRMS<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1), 0, computeStream>>>(
           d_layerGradients[i], d_adamMomentum[i], d_adamRMS[i], adamBeta1, adamBeta2);
     }
   }
@@ -392,7 +385,7 @@ private:
       int bpgX = (d_layerWeights[i].inputSize + TPB_X - 1) / TPB_X;
       int bpgY = (d_layerWeights[i].layerSize + TPB_Y - 1) / TPB_Y;
 
-      updateWeightsWithAdam<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1)>>>(
+      updateWeightsWithAdam<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1), 0, computeStream>>>(
           d_layerWeights[i], d_adamMomentum[i], d_adamRMS[i],
           adamBeta1, adamBeta2, adamLearnRate, adamEpsilon);
     }
@@ -468,7 +461,6 @@ private:
       maxLayerSize = max(maxLayerSize, layerSizes[i]);
 
       d_layerWeights.push_back(util::NewLayerWeights(prevLayerSize + 1, layerSizes[i]));
-      d_layerWeightsBridge.push_back(util::NewLayerWeights(prevLayerSize + 1, layerSizes[i]));
       d_targetLayerWeights.push_back(util::NewLayerWeights(prevLayerSize + 1, layerSizes[i]));
       d_layerGradients.push_back(util::NewLayerWeights(prevLayerSize + 1, layerSizes[i]));
       d_layerOutputs.push_back(util::NewLayerBatchOutputs(networkSpec.maxBatchSize, layerSizes[i] + 1));
@@ -478,7 +470,10 @@ private:
       d_adamRMS.push_back(util::NewLayerWeights(prevLayerSize + 1, layerSizes[i]));
     }
 
-    d_samplesBatch = util::NewSamplesBatch(networkSpec.maxBatchSize, networkSpec.numInputs);
+    for (unsigned i = 0; i < NUM_BUFFERS; i++) {
+      d_samplesBatch.push_back(
+          util::NewSamplesBatch(networkSpec.maxBatchSize, networkSpec.numInputs););
+    }
     d_transposeScratch = util::NewLayerWeights(maxLayerSize, maxInputSize);
   }
 };

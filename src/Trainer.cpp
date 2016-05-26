@@ -62,16 +62,10 @@ struct Trainer::TrainerImpl {
     numLearnIters = 0;
     std::thread playoutThread([this, iters, &experienceMemory, &agent]() {
       movesConsideredCounter = 0;
-      Timer timer;
-      timer.Start();
 
       while (numLearnIters.load() < iters) {
         this->playoutRound(agent.get(), experienceMemory.get());
       }
-
-      timer.Stop();
-      std::cout << "playout per second: " << (movesConsideredCounter / timer.GetNumElapsedSeconds())
-                << std::endl;
     });
 
     std::thread learnThread([this, iters, &experienceMemory, &agent]() {

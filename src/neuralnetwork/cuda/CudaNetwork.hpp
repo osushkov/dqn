@@ -10,11 +10,14 @@ namespace neuralnetwork {
 namespace cuda {
 
 struct QBatch {
+  unsigned batchSize;
+
   math::MatrixView initialStates;
   math::MatrixView successorStates;
-  std::vector<unsigned> actionsTaken;
-  std::vector<char> isEndStateTerminal;
-  std::vector<float> rewardsGained;
+
+  unsigned *actionsTaken;
+  char *isEndStateTerminal;
+  float* rewardsGained;
 
   float futureRewardDiscount;
 };

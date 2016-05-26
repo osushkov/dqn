@@ -14,9 +14,6 @@ namespace util {
 
 void OutputError(cudaError_t code, const char *file, int line);
 
-void *AllocPushBuffer(size_t bufSize);
-void FreePushBuffer(void *buf);
-
 LayerWeights NewLayerWeights(unsigned inputSize, unsigned layerSize);
 void DeleteLayerWeights(LayerWeights &lw);
 

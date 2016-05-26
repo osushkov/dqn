@@ -15,7 +15,6 @@ public:
   virtual ~Network();
 
   EVector Process(const EVector &input) const;
-  void Refresh(void);
 
   // TODO: add a ProcessAsync that can output results while a training batch is running.
   // This will be more relevant for RL tasks where parallel processing and training makes sense.
@@ -23,7 +22,7 @@ public:
   // TODO: this will probably need to have some kind of learning rate as a parameter.
   void Update(const SamplesProvider &samplesProvider);
 
-  uptr<Network> ReadOnlyCopy(void) const;
+  uptr<Network> RefreshAndGetTarget(void);
 
 private:
   // Non-copyable

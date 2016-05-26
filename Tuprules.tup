@@ -12,7 +12,7 @@ CUDAFLAGS += --default-stream per-thread
 CUDAFLAGS += -Xcudafe "--diag_suppress=boolean_controlling_expr_is_constant"
 
 ifdef RELEASE
-  CCFLAGS += -Ofast
+  CCFLAGS += -O3
   CUDAFLAGS += -O3
 endif
 

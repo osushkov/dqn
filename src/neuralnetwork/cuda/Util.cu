@@ -13,22 +13,6 @@ void util::OutputError(cudaError_t code, const char *file, int line) {
   }
 }
 
-void *util::AllocPushBuffer(size_t bufSize) {
-  void* result = nullptr;
-
-  cudaError_t err = cudaHostAlloc(&result, bufSize, cudaHostAllocWriteCombined);
-  CheckError(err);
-  assert(result != nullptr);
-
-  return result;
-}
-
-void util::FreePushBuffer(void *buf) {
-  assert(buf != nullptr);
-  cudaError_t err = cudaFreeHost(buf);
-  CheckError(err);
-}
-
 LayerWeights util::NewLayerWeights(unsigned inputSize, unsigned layerSize) {
   assert(inputSize > 0 && layerSize > 0);
 

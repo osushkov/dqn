@@ -2,6 +2,7 @@
 #include "LearningAgent.hpp"
 #include "../common/Common.hpp"
 #include "../common/Util.hpp"
+#include "../common/Timer.hpp"
 #include "../neuralnetwork/Network.hpp"
 #include "../neuralnetwork/NetworkSpec.hpp"
 #include "Constants.hpp"
@@ -28,7 +29,7 @@ struct LearningAgent::LearningAgentImpl {
     spec.maxBatchSize = MOMENTS_BATCH_SIZE;
 
     learningNet = make_unique<neuralnetwork::Network>(spec);
-    targetNet = learningNet->ReadOnlyCopy();
+    targetNet = learningNet->RefreshAndGetTarget();
     itersSinceTargetUpdated = 0;
   }
 
@@ -53,8 +54,7 @@ struct LearningAgent::LearningAgentImpl {
 
   void Learn(const vector<ExperienceMoment> &moments) {
     if (itersSinceTargetUpdated > TARGET_FUNCTION_UPDATE_RATE) {
-      learningNet->Refresh();
-      targetNet = learningNet->ReadOnlyCopy();
+      targetNet = learningNet->RefreshAndGetTarget();
       itersSinceTargetUpdated = 0;
     }
 
@@ -64,7 +64,8 @@ struct LearningAgent::LearningAgentImpl {
     for (const auto &moment : moments) {
       learnSamples.emplace_back(moment.initialState, moment.successorState,
                                 GameAction::ACTION_INDEX(moment.actionTaken),
-                                moment.isSuccessorTerminal, moment.reward, REWARD_DELAY_DISCOUNT);
+                                moment.isSuccessorTerminal, moment.reward,
+                                REWARD_DELAY_DISCOUNT);
 
       // float mq = maxQ(moment.successorState);
       //
@@ -78,7 +79,12 @@ struct LearningAgent::LearningAgentImpl {
       //                           GameAction::ACTION_INDEX(moment.actionTaken));
     }
 
+    // Timer timer;
+    // timer.Start();
     learningNet->Update(neuralnetwork::SamplesProvider(learnSamples));
+    // timer.Stop();
+    // std::cout << "nn calc: " << timer.GetNumElapsedMicroseconds() << std::endl;
+
     itersSinceTargetUpdated++;
   }
 
@@ -149,12 +155,12 @@ EVector LearningAgent::EncodeGameState(const GameState *state) {
 }
 
 // EVector LearningAgent::EncodeGameState(const GameState *state) {
-//   EVector result(BOARD_WIDTH * BOARD_HEIGHT * 2);
-//   result.fill(0.0f)
+//   EVector result(BOARD_WIDTH * BOARD_HEIGHT);
+//   result.fill(0.0f);
 //
+//   unsigned ri = 0;
 //   for (unsigned r = 0; r < BOARD_HEIGHT; r++) {
 //     for (unsigned c = 0; c < BOARD_WIDTH; c++) {
-//       unsigned ri = 0;
 //
 //       switch (state->GetCell(r, c)) {
 //       case CellState::EMPTY:
