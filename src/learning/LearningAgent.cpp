@@ -1,8 +1,8 @@
 
 #include "LearningAgent.hpp"
 #include "../common/Common.hpp"
-#include "../common/Util.hpp"
 #include "../common/Timer.hpp"
+#include "../common/Util.hpp"
 #include "../neuralnetwork/Network.hpp"
 #include "../neuralnetwork/NetworkSpec.hpp"
 #include "Constants.hpp"
@@ -23,7 +23,7 @@ struct LearningAgent::LearningAgentImpl {
     neuralnetwork::NetworkSpec spec;
     spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
-    spec.hiddenLayers = {spec.numInputs, spec.numInputs / 2, spec.numInputs / 2};
+    spec.hiddenLayers = {spec.numInputs, spec.numInputs / 2};
     spec.hiddenActivation = neuralnetwork::LayerActivation::LEAKY_RELU;
     spec.outputActivation = neuralnetwork::LayerActivation::TANH;
     spec.maxBatchSize = MOMENTS_BATCH_SIZE;
@@ -64,8 +64,7 @@ struct LearningAgent::LearningAgentImpl {
     for (const auto &moment : moments) {
       learnSamples.emplace_back(moment.initialState, moment.successorState,
                                 GameAction::ACTION_INDEX(moment.actionTaken),
-                                moment.isSuccessorTerminal, moment.reward,
-                                REWARD_DELAY_DISCOUNT);
+                                moment.isSuccessorTerminal, moment.reward, REWARD_DELAY_DISCOUNT);
 
       // float mq = maxQ(moment.successorState);
       //
