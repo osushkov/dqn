@@ -8,6 +8,7 @@
 #include "cuda/CudaNetwork.hpp"
 #include "cuda/Memory.hpp"
 
+#include <atomic>
 #include <boost/thread/shared_mutex.hpp>
 #include <cassert>
 #include <cmath>
@@ -24,6 +25,7 @@ struct Network::NetworkImpl {
   math::Tensor layerWeights;
   uptr<cuda::CudaNetwork> cudaNetwork;
 
+  unsigned inputBatchIndex;
   std::vector<cuda::QBatch> inputBatches;
 
   NetworkImpl(const NetworkSpec &spec, bool isTrainable) : spec(spec) {
@@ -37,11 +39,10 @@ struct Network::NetworkImpl {
     }
 
     allocateInputBatches();
+    inputBatchIndex = 0;
   }
 
-  ~NetworkImpl() {
-    freeInputBatches();
-  }
+  ~NetworkImpl() { freeInputBatches(); }
 
   EVector Process(const EVector &input) const {
     assert(input.rows() == spec.numInputs);
@@ -63,9 +64,12 @@ struct Network::NetworkImpl {
     assert(cudaNetwork != nullptr);
     assert(samplesProvider.NumSamples() <= spec.maxBatchSize);
 
-    inputBatches[0].batchSize = samplesProvider.NumSamples();
-    inputBatches[0].initialStates.rows = samplesProvider.NumSamples();
-    inputBatches[0].successorStates.rows = samplesProvider.NumSamples();
+    unsigned curInputBatch = (inputBatchIndex++) % 2;
+
+    // std::cout << "curInputBatch: " << (int)curInputBatch << std::endl;
+    inputBatches[curInputBatch].batchSize = samplesProvider.NumSamples();
+    inputBatches[curInputBatch].initialStates.rows = samplesProvider.NumSamples();
+    inputBatches[curInputBatch].successorStates.rows = samplesProvider.NumSamples();
 
     for (unsigned i = 0; i < samplesProvider.NumSamples(); i++) {
       const TrainingSample &sample = samplesProvider[i];
@@ -75,19 +79,19 @@ struct Network::NetworkImpl {
       assert(sample.actionTaken < spec.numOutputs);
 
       for (unsigned j = 0; j < sample.startState.rows(); j++) {
-        unsigned cols = inputBatches[0].initialStates.cols;
-        inputBatches[0].initialStates.data[j + i * cols] = sample.startState(j);
-        inputBatches[0].successorStates.data[j + i * cols] = sample.endState(j);
+        unsigned cols = inputBatches[curInputBatch].initialStates.cols;
+        inputBatches[curInputBatch].initialStates.data[j + i * cols] = sample.startState(j);
+        inputBatches[curInputBatch].successorStates.data[j + i * cols] = sample.endState(j);
       }
 
-      inputBatches[0].actionsTaken[i] = sample.actionTaken;
-      inputBatches[0].isEndStateTerminal[i] = static_cast<char>(sample.isEndStateTerminal);
-      inputBatches[0].rewardsGained[i] = sample.rewardGained;
-      inputBatches[0].futureRewardDiscount = sample.futureRewardDiscount;
+      inputBatches[curInputBatch].actionsTaken[i] = sample.actionTaken;
+      inputBatches[curInputBatch].isEndStateTerminal[i] =
+          static_cast<char>(sample.isEndStateTerminal);
+      inputBatches[curInputBatch].rewardsGained[i] = sample.rewardGained;
+      inputBatches[curInputBatch].futureRewardDiscount = sample.futureRewardDiscount;
     }
 
-    std::lock_guard<std::mutex> lock(trainMutex);
-    cudaNetwork->Train(inputBatches[0]);
+    cudaNetwork->Train(inputBatches[curInputBatch]);
   }
 
   uptr<NetworkImpl> RefreshAndGetTarget(void) {
@@ -199,19 +203,22 @@ struct Network::NetworkImpl {
   void allocateInputBatches(void) {
     for (unsigned i = 0; i < 2; i++) {
       cuda::QBatch batch;
-      batch.actionsTaken = (unsigned *) cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(unsigned));
-      batch.isEndStateTerminal = (char *) cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(char));
-      batch.rewardsGained = (float *)cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(float));
+      batch.actionsTaken =
+          (unsigned *)cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(unsigned));
+      batch.isEndStateTerminal =
+          (char *)cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(char));
+      batch.rewardsGained =
+          (float *)cuda::memory::AllocPushBuffer(spec.maxBatchSize * sizeof(float));
 
       size_t mbufSize = spec.maxBatchSize * spec.numInputs * sizeof(float);
 
       batch.initialStates.rows = spec.maxBatchSize;
       batch.initialStates.cols = spec.numInputs;
-      batch.initialStates.data = (float* ) cuda::memory::AllocPushBuffer(mbufSize);
+      batch.initialStates.data = (float *)cuda::memory::AllocPushBuffer(mbufSize);
 
       batch.successorStates.rows = spec.maxBatchSize;
       batch.successorStates.cols = spec.numInputs;
-      batch.successorStates.data = (float *) cuda::memory::AllocPushBuffer(mbufSize);
+      batch.successorStates.data = (float *)cuda::memory::AllocPushBuffer(mbufSize);
 
       inputBatches.push_back(batch);
     }

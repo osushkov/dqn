@@ -8,7 +8,6 @@ CCFLAGS += -Wall -Wno-deprecated-declarations -Wno-unused-variable
 
 CUDAFLAGS += --std=c++11
 CUDAFLAGS += --use_fast_math
-CUDAFLAGS += --default-stream per-thread
 CUDAFLAGS += -Xcudafe "--diag_suppress=boolean_controlling_expr_is_constant"
 
 ifdef RELEASE

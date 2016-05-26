@@ -14,13 +14,14 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <future>
 #include <thread>
 #include <vector>
 
 using namespace learning;
 
 static constexpr unsigned EXPERIENCE_MEMORY_SIZE = 100000;
-static constexpr float INITIAL_PRANDOM = 1.0f;
+static constexpr float INITIAL_PRANDOM = 0.8f;
 static constexpr float TARGET_PRANDOM = 0.05f;
 
 struct PlayoutAgent {
@@ -51,7 +52,6 @@ struct PlayoutAgent {
 struct Trainer::TrainerImpl {
   vector<ProgressCallback> callbacks;
   atomic<unsigned> numLearnIters;
-  unsigned movesConsideredCounter;
 
   void AddProgressCallback(ProgressCallback callback) { callbacks.push_back(callback); }
 
@@ -61,19 +61,19 @@ struct Trainer::TrainerImpl {
 
     numLearnIters = 0;
     std::thread playoutThread([this, iters, &experienceMemory, &agent]() {
-      movesConsideredCounter = 0;
+      float pRandom = INITIAL_PRANDOM;
+      float pRandDecay = powf(TARGET_PRANDOM / INITIAL_PRANDOM, 1.0f / iters);
+      assert(pRandDecay > 0.0f && pRandDecay < 1.0f);
 
       while (numLearnIters.load() < iters) {
+        float prand = INITIAL_PRANDOM * powf(pRandDecay, numLearnIters.load());
+        agent->SetPRandom(prand);
         this->playoutRound(agent.get(), experienceMemory.get());
       }
     });
 
     std::thread learnThread([this, iters, &experienceMemory, &agent]() {
-      float pRandom = INITIAL_PRANDOM;
-      float pRandDecay = powf(TARGET_PRANDOM / INITIAL_PRANDOM, 1.0f / iters);
-      assert(pRandDecay > 0.0f && pRandDecay < 1.0f);
-
-      while (experienceMemory->NumMemories() < 100) {
+      while (experienceMemory->NumMemories() < 2 * MOMENTS_BATCH_SIZE) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
       }
 
@@ -81,14 +81,8 @@ struct Trainer::TrainerImpl {
       timer.Start();
 
       for (unsigned i = 0; i < iters; i++) {
-        // if (i % 100 == 0) {
-        //   std::cout << i << std::endl;
-        // }
-        agent->SetPRandom(pRandom); // TODO: this should be synted with the other thread.
         agent->Learn(experienceMemory->Sample(MOMENTS_BATCH_SIZE));
-        pRandom *= pRandDecay;
-
-        numLearnIters++;
+        this->numLearnIters++;
       }
 
       timer.Stop();
@@ -102,34 +96,81 @@ struct Trainer::TrainerImpl {
     return move(agent);
   }
 
+  // void playoutRound(LearningAgent *agent, ExperienceMemory *memory) {
+  //   GameRules *rules = GameRules::Instance();
+  //   GameState curState(rules->InitialState());
+  //
+  //   std::vector<PlayoutAgent> opponents = {PlayoutAgent(agent, memory),
+  //                                          PlayoutAgent(agent, memory)};
+  //   unsigned curPlayerIndex = rand() % 2;
+  //
+  //   while (true) {
+  //     PlayoutAgent &curPlayer = opponents[curPlayerIndex];
+  //     PlayoutAgent &otherPlayer = opponents[(curPlayerIndex + 1) % opponents.size()];
+  //
+  //     EVector encodedState = LearningAgent::EncodeGameState(&curState);
+  //     GameAction action = curPlayer.agent->SelectLearningAction(&curState, encodedState);
+  //
+  //     if (curPlayer.havePreviousState()) {
+  //       curPlayer.addTransitionToMemory(encodedState, 0.0f, false);
+  //     }
+  //
+  //     curPlayer.addMoveToHistory(encodedState, action);
+  //     curState = curState.SuccessorState(action);
+  //
+  //     switch (rules->GameCompletionState(curState)) {
+  //     case CompletionState::WIN:
+  //       encodedState = LearningAgent::EncodeGameState(&curState);
+  //       curPlayer.addTransitionToMemory(encodedState, 1.0f, true);
+  //       otherPlayer.addTransitionToMemory(encodedState, -1.0f, true);
+  //
+  //       return;
+  //     case CompletionState::LOSS:
+  //       assert(false); // This actually shouldn't be possible.
+  //       return;
+  //     case CompletionState::DRAW:
+  //       encodedState = LearningAgent::EncodeGameState(&curState);
+  //       curPlayer.addTransitionToMemory(encodedState, 0.0f, true);
+  //       otherPlayer.addTransitionToMemory(encodedState, 0.0f, true);
+  //       return;
+  //     case CompletionState::UNFINISHED:
+  //       curState.FlipState();
+  //       curPlayerIndex = (curPlayerIndex + 1) % 2;
+  //     }
+  //   }
+  // }
+
   void playoutRound(LearningAgent *agent, ExperienceMemory *memory) {
     GameRules *rules = GameRules::Instance();
     GameState curState(rules->InitialState());
 
-    std::vector<PlayoutAgent> opponents = {PlayoutAgent(agent, memory),
-                                           PlayoutAgent(agent, memory)};
+    RandomAgent opponent;
+    PlayoutAgent pagent(agent, memory);
+
     unsigned curPlayerIndex = rand() % 2;
 
     while (true) {
-      PlayoutAgent &curPlayer = opponents[curPlayerIndex];
-      PlayoutAgent &otherPlayer = opponents[(curPlayerIndex + 1) % opponents.size()];
 
-      EVector encodedState = LearningAgent::EncodeGameState(&curState);
-      movesConsideredCounter++;
-      GameAction action = curPlayer.agent->SelectLearningAction(&curState, encodedState);
+      EVector encodedState;
+      GameAction action;
+      if (curPlayerIndex == 0) {
+        encodedState = LearningAgent::EncodeGameState(&curState);
+        action = pagent.agent->SelectLearningAction(&curState, encodedState);
 
-      if (curPlayer.havePreviousState()) {
-        curPlayer.addTransitionToMemory(encodedState, 0.0f, false);
+        if (pagent.havePreviousState()) {
+          pagent.addTransitionToMemory(encodedState, 0.0f, false);
+        }
+
+        pagent.addMoveToHistory(encodedState, action);
+      } else {
+        action = opponent.SelectAction(&curState);
       }
-
-      curPlayer.addMoveToHistory(encodedState, action);
       curState = curState.SuccessorState(action);
 
       switch (rules->GameCompletionState(curState)) {
       case CompletionState::WIN:
         encodedState = LearningAgent::EncodeGameState(&curState);
-        curPlayer.addTransitionToMemory(encodedState, 1.0f, true);
-        otherPlayer.addTransitionToMemory(encodedState, -1.0f, true);
+        pagent.addTransitionToMemory(encodedState, curPlayerIndex == 0 ? 1.0f : -1.0f, true);
 
         return;
       case CompletionState::LOSS:
@@ -137,8 +178,7 @@ struct Trainer::TrainerImpl {
         return;
       case CompletionState::DRAW:
         encodedState = LearningAgent::EncodeGameState(&curState);
-        curPlayer.addTransitionToMemory(encodedState, 0.0f, true);
-        otherPlayer.addTransitionToMemory(encodedState, 0.0f, true);
+        pagent.addTransitionToMemory(encodedState, 0.0f, true);
         return;
       case CompletionState::UNFINISHED:
         curState.FlipState();

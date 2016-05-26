@@ -1,7 +1,6 @@
 
 #include "CudaNetwork.hpp"
 #include "Util.hpp"
-#include "SoftmaxKernel.hpp"
 #include "ForwardPassKernel.hpp"
 #include "TransposeKernel.hpp"
 #include "BackwardDeltaKernel.hpp"
@@ -223,12 +222,7 @@ struct CudaNetwork::CudaNetworkImpl {
   }
 
   void Train(const QBatch &qbatch) {
-
-    // for (unsigned i = 0; i < targetOutputs.size(); i++) {
-    //   std::cout << targetOutputIndices[i] << " : " << targetOutputs[i] << std::endl;
-    // }
-    // std::cout << std::endl;
-
+    // std::cout << "s: " << computeStream[curStream] << std::endl;
     uploadSamplesBatch(qbatch);
 
     // cudaStreamSynchronize(computeStream[otherStream]);
@@ -239,8 +233,8 @@ struct CudaNetwork::CudaNetworkImpl {
     updateAdamParams();
     updateWeights();
 
-    curStream = 1 - curStream;
-    otherStream = 1 - otherStream;
+    // curStream = 1 - curStream;
+    // otherStream = 1 - otherStream;
   }
 
 private:
@@ -326,11 +320,6 @@ private:
 
       ForwardPassKernel::Apply(d_layerWeights[i-1], d_layerOutputs[i-1], d_layerOutputs[i],
           activation, computeStream[curStream]);
-    }
-
-    LayerBatchOutputs lastLayer = d_layerOutputs[d_layerOutputs.size() - 1];
-    if (networkSpec.outputActivation == LayerActivation::SOFTMAX) {
-      SoftmaxKernel::Apply(lastLayer, computeStream[curStream]);
     }
   }
 

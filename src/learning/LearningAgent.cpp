@@ -57,6 +57,7 @@ struct LearningAgent::LearningAgentImpl {
       targetNet = learningNet->RefreshAndGetTarget();
       itersSinceTargetUpdated = 0;
     }
+    itersSinceTargetUpdated++;
 
     vector<neuralnetwork::TrainingSample> learnSamples;
     learnSamples.reserve(moments.size());
@@ -65,17 +66,6 @@ struct LearningAgent::LearningAgentImpl {
       learnSamples.emplace_back(moment.initialState, moment.successorState,
                                 GameAction::ACTION_INDEX(moment.actionTaken),
                                 moment.isSuccessorTerminal, moment.reward, REWARD_DELAY_DISCOUNT);
-
-      // float mq = maxQ(moment.successorState);
-      //
-      // float targetValue;
-      // if (moment.isSuccessorTerminal) {
-      //   targetValue = moment.reward;
-      // } else {
-      //   targetValue = moment.reward + REWARD_DELAY_DISCOUNT * mq;
-      // }
-      // learnSamples.emplace_back(moment.initialState, targetValue,
-      //                           GameAction::ACTION_INDEX(moment.actionTaken));
     }
 
     // Timer timer;
@@ -83,24 +73,12 @@ struct LearningAgent::LearningAgentImpl {
     learningNet->Update(neuralnetwork::SamplesProvider(learnSamples));
     // timer.Stop();
     // std::cout << "nn calc: " << timer.GetNumElapsedMicroseconds() << std::endl;
-
-    itersSinceTargetUpdated++;
   }
 
   float GetQValue(const GameState &state, const GameAction &action) const {
     auto encodedState = LearningAgent::EncodeGameState(&state);
     EVector qvalues = learningNet->Process(encodedState);
     return qvalues(GameAction::ACTION_INDEX(action));
-  }
-
-  float maxQ(const EVector &encodedState) const {
-    EVector qa = targetNet->Process(encodedState);
-
-    float maxVal = qa(0);
-    for (int i = 1; i < qa.rows(); i++) {
-      maxVal = max(maxVal, qa(i));
-    }
-    return maxVal;
   }
 
   GameAction chooseBestAction(const EVector &encodedState) {
