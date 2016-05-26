@@ -23,7 +23,7 @@ struct LearningAgent::LearningAgentImpl {
     neuralnetwork::NetworkSpec spec;
     spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
-    spec.hiddenLayers = {spec.numInputs, spec.numInputs / 2};
+    spec.hiddenLayers = {spec.numInputs, spec.numInputs / 2, spec.numInputs / 2};
     spec.hiddenActivation = neuralnetwork::LayerActivation::LEAKY_RELU;
     spec.outputActivation = neuralnetwork::LayerActivation::TANH;
     spec.maxBatchSize = MOMENTS_BATCH_SIZE;

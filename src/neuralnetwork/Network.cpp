@@ -117,12 +117,8 @@ struct Network::NetworkImpl {
     assert(prevLayer.rows() == layerWeights.cols() - 1);
 
     EVector z = layerWeights * getInputWithBias(prevLayer);
-    if (afunc == LayerActivation::SOFTMAX) {
-      z = softmaxActivations(z);
-    } else {
-      for (unsigned i = 0; i < z.rows(); i++) {
-        z(i) = ActivationValue(afunc, z(i));
-      }
+    for (unsigned i = 0; i < z.rows(); i++) {
+      z(i) = ActivationValue(afunc, z(i));
     }
 
     return z;
@@ -176,28 +172,6 @@ struct Network::NetworkImpl {
     }
 
     cudaNetwork->SetWeights(weights);
-  }
-
-  EVector softmaxActivations(const EVector &in) const {
-    assert(in.rows() > 0);
-    EVector result(in.rows());
-
-    float maxVal = in(0);
-    for (int r = 0; r < in.rows(); r++) {
-      maxVal = fmax(maxVal, in(r));
-    }
-
-    float sum = 0.0f;
-    for (int i = 0; i < in.rows(); i++) {
-      result(i) = expf(in(i)-maxVal);
-      sum += result(i);
-    }
-
-    for (int i = 0; i < result.rows(); i++) {
-      result(i) /= sum;
-    }
-
-    return result;
   }
 
   void allocateInputBatches(void) {
