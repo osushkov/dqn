@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
   // srand(time(NULL));
 
   Trainer trainer;
-  auto trainedAgent = trainer.TrainAgent(100000);
+  auto trainedAgent = trainer.TrainAgent(10000);
 
   learning::RandomAgent baselineAgent;
 

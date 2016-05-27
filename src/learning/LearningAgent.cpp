@@ -14,16 +14,17 @@ using namespace learning;
 
 struct LearningAgent::LearningAgentImpl {
   float pRandom;
+  float temperature;
 
   uptr<neuralnetwork::Network> learningNet;
   uptr<neuralnetwork::Network> targetNet;
   unsigned itersSinceTargetUpdated = 0;
 
-  LearningAgentImpl() : pRandom(0.0f) {
+  LearningAgentImpl() : pRandom(0.0f), temperature(0.0001f) {
     neuralnetwork::NetworkSpec spec;
     spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
-    spec.hiddenLayers = {spec.numInputs, spec.numInputs / 2, spec.numInputs / 2};
+    spec.hiddenLayers = {spec.numInputs, spec.numInputs};
     spec.hiddenActivation = neuralnetwork::LayerActivation::LEAKY_RELU;
     spec.outputActivation = neuralnetwork::LayerActivation::TANH;
     spec.maxBatchSize = MOMENTS_BATCH_SIZE;
@@ -35,7 +36,7 @@ struct LearningAgent::LearningAgentImpl {
 
   GameAction SelectAction(const GameState *state) {
     assert(state != nullptr);
-    return chooseBestAction(LearningAgent::EncodeGameState(state));
+    return chooseBestAction(*state, LearningAgent::EncodeGameState(state));
   }
 
   void SetPRandom(float pRandom) {
@@ -43,12 +44,18 @@ struct LearningAgent::LearningAgentImpl {
     this->pRandom = pRandom;
   }
 
+  void SetTemperature(float temperature) {
+    assert(temperature > 0.0f);
+    this->temperature = temperature;
+  }
+
   GameAction SelectLearningAction(const GameState *state, const EVector &encodedState) {
     assert(state != nullptr);
     if (Util::RandInterval(0.0, 1.0) < pRandom) {
       return chooseExplorativeAction(*state);
     } else {
-      return chooseBestAction(encodedState);
+      return chooseWeightedAction(*state, encodedState);
+      // return chooseBestAction(*state, encodedState);
     }
   }
 
@@ -81,20 +88,22 @@ struct LearningAgent::LearningAgentImpl {
     return qvalues(GameAction::ACTION_INDEX(action));
   }
 
-  GameAction chooseBestAction(const EVector &encodedState) {
+  GameAction chooseBestAction(const GameState &state, const EVector &encodedState) {
     EVector qvalues = learningNet->Process(encodedState);
     assert(qvalues.rows() == static_cast<int>(GameAction::ALL_ACTIONS().size()));
 
-    GameAction bestAction = GameAction::ACTION(0);
-    float bestQValue = qvalues(0);
+    std::vector<unsigned> availableActions = state.AvailableActions();
+    assert(availableActions.size() > 0);
 
-    for (int i = 1; i < qvalues.rows(); i++) {
-      if (qvalues(i) > bestQValue) {
-        bestQValue = qvalues(i);
-        bestAction = GameAction::ACTION(i);
+    GameAction bestAction = GameAction::ACTION(availableActions[0]);
+    float bestQValue = qvalues(availableActions[0]);
+
+    for (unsigned i = 1; i < availableActions.size(); i++) {
+      if (qvalues(availableActions[i]) > bestQValue) {
+        bestQValue = qvalues(availableActions[i]);
+        bestAction = GameAction::ACTION(availableActions[i]);
       }
     }
-    // std::cout << "choosing best action: " << bestQValue << std::endl;
     return bestAction;
   }
 
@@ -102,6 +111,31 @@ struct LearningAgent::LearningAgentImpl {
     // std::cout << "choosing random" << std::endl;
     auto aa = state.AvailableActions();
     return GameAction::ACTION(aa[rand() % aa.size()]);
+  }
+
+  GameAction chooseWeightedAction(const GameState &state, const EVector &encodedState) {
+    EVector qv = learningNet->Process(encodedState);
+    assert(qv.rows() == static_cast<int>(GameAction::ALL_ACTIONS().size()));
+
+    std::vector<unsigned> availableActions = state.AvailableActions();
+    std::vector<float> weights;
+
+    for (unsigned i = 0; i < availableActions.size(); i++) {
+      weights.push_back(qv(availableActions[i]) / temperature);
+    }
+    weights = Util::SoftmaxWeights(weights);
+
+    float sample = Util::RandInterval(0.0, 1.0);
+    for (unsigned i = 0; i < weights.size(); i++) {
+      sample -= weights[i];
+      if (sample <= 0.0f) {
+        // std::cout << "weighted: " << availableActions[i] << std::endl;
+        return GameAction::ACTION(availableActions[i]);
+      }
+    }
+
+    std::cout << "sample: " << sample << std::endl;
+    return chooseExplorativeAction(state);
   }
 };
 
@@ -166,6 +200,7 @@ LearningAgent::~LearningAgent() = default;
 GameAction LearningAgent::SelectAction(const GameState *state) { return impl->SelectAction(state); }
 
 void LearningAgent::SetPRandom(float pRandom) { impl->SetPRandom(pRandom); }
+void LearningAgent::SetTemperature(float temperature) { impl->SetTemperature(temperature); }
 
 GameAction LearningAgent::SelectLearningAction(const GameState *state,
                                                const EVector &encodedState) {

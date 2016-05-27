@@ -42,6 +42,7 @@ void GameState::PlaceToken(unsigned col) {
   assert(colHeights[col] <= BOARD_HEIGHT);
 
   if (colHeights[col] == BOARD_HEIGHT) {
+    assert(false);
     return;
   }
 

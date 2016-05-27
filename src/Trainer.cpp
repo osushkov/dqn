@@ -21,8 +21,12 @@
 using namespace learning;
 
 static constexpr unsigned EXPERIENCE_MEMORY_SIZE = 100000;
+
 static constexpr float INITIAL_PRANDOM = 0.8f;
 static constexpr float TARGET_PRANDOM = 0.05f;
+
+static constexpr float INITIAL_TEMPERATURE = 5.0f;
+static constexpr float TARGET_TEMPERATURE = 0.0001f;
 
 struct PlayoutAgent {
   LearningAgent *agent;
@@ -61,13 +65,19 @@ struct Trainer::TrainerImpl {
 
     numLearnIters = 0;
     std::thread playoutThread([this, iters, &experienceMemory, &agent]() {
-      float pRandom = INITIAL_PRANDOM;
       float pRandDecay = powf(TARGET_PRANDOM / INITIAL_PRANDOM, 1.0f / iters);
       assert(pRandDecay > 0.0f && pRandDecay < 1.0f);
 
+      float tempDecay = powf(TARGET_TEMPERATURE / INITIAL_TEMPERATURE, 1.0f / iters);
+      assert(tempDecay > 0.0f && tempDecay < 1.0f);
+
       while (numLearnIters.load() < iters) {
-        float prand = INITIAL_PRANDOM * powf(pRandDecay, numLearnIters.load());
+        unsigned doneIters = numLearnIters.load();
+        float prand = INITIAL_PRANDOM * powf(pRandDecay, doneIters);
+        float temp = INITIAL_TEMPERATURE * powf(tempDecay, doneIters);
+
         agent->SetPRandom(prand);
+        agent->SetTemperature(temp);
         this->playoutRound(agent.get(), experienceMemory.get());
       }
     });
