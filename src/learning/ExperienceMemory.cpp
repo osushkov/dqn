@@ -1,11 +1,17 @@
 
 #include "ExperienceMemory.hpp"
+#include "../common/Util.hpp"
 #include <cassert>
 
 using namespace learning;
 
 // How much memory to purge (as a ratio of max size) when the occupancy is saturated.
 static constexpr float PURGE_RATIO = 0.2f;
+
+static unsigned expRand(void) {
+  float u = Util::RandInterval(0.0, 1.0);
+  return static_cast<unsigned>(-logf(u) / 0.0001f);
+}
 
 ExperienceMemory::ExperienceMemory(unsigned maxSize)
     : pastExperiences(maxSize), head(0), tail(0), occupancy(0) {}
@@ -46,7 +52,11 @@ vector<ExperienceMoment> ExperienceMemory::Sample(unsigned numSamples) const {
   result.reserve(numSamples);
 
   for (unsigned i = 0; i < numSamples; i++) {
-    result.push_back(pastExperiences[wrappedIndex(rand())]);
+    // unsigned r = expRand();
+    // unsigned offsetFromHead = occupancy - (r % occupancy);
+    unsigned offsetFromHead = rand();
+    // std::cout << r << " " << offsetFromHead << std::endl;
+    result.push_back(pastExperiences[wrappedIndex(offsetFromHead)]);
   }
 
   return result;

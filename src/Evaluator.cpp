@@ -9,6 +9,15 @@
 
 using namespace connectfour;
 
+
+static void printStates(const std::vector<GameState> &states) {
+  for (const auto& gs : states) {
+    std::cout << gs << std::endl << std::endl;
+  }
+
+  std::cout << "---------------------------" << std::endl << std::endl;
+}
+
 Evaluator::Evaluator(unsigned numTrials) : numTrials(numTrials) { assert(numTrials > 0); }
 
 std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary,
@@ -20,7 +29,7 @@ std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary,
   for (unsigned i = 0; i < numTrials; i++) {
     int res = runTrial(primary, opponent);
     if (res == 0) {
-      std::cout << "ITS A DAR!!!" << std::endl;
+      std::cout << "ITS A DRAW!!!" << std::endl;
       numDraws++;
     } else if (res == 1) {
       numWins++;
@@ -34,16 +43,26 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) con
   GameRules *rules = GameRules::Instance();
   vector<learning::Agent *> agents = {primary, opponent};
 
+  std::vector<GameState> states;
+
   unsigned curPlayerIndex = rand() % agents.size();
   GameState curState(rules->InitialState());
 
   while (true) {
     learning::Agent *curPlayer = agents[curPlayerIndex];
     GameAction action = curPlayer->SelectAction(&curState);
+
+    if (curPlayer == primary) {
+      states.push_back(curState);
+    }
+
     curState = curState.SuccessorState(action);
 
     switch (rules->GameCompletionState(curState)) {
     case CompletionState::WIN:
+      if (curPlayer != primary) {
+        printStates(states);
+      }
       return curPlayer == primary ? 1 : -1;
     case CompletionState::LOSS:
       assert(false); // This actually shouldn't be possible.
