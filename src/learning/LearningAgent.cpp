@@ -165,7 +165,7 @@ EVector LearningAgent::EncodeGameState(const GameState *state) {
         result(ri) = 1.0f;
         break;
       case CellState::OPPONENT_TOKEN:
-        result(ri + 1) = 1.0f;
+        result(ri + 1) = -1.0f;
         break;
       default:
         break;

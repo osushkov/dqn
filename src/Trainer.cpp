@@ -79,7 +79,7 @@ struct Trainer::TrainerImpl {
     std::vector<uptr<LearningAgent>> agents;
     agents.push_back(move(agent));
 
-    for (unsigned i = 0; i < 5; i++) {
+    for (unsigned i = 0; i < 1; i++) {
       std::vector<Agent*> opponents;
       for (const auto &a : agents) {
         opponents.push_back(a.get());
