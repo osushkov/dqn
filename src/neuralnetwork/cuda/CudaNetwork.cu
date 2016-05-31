@@ -24,10 +24,10 @@ using namespace neuralnetwork::cuda;
 using namespace std;
 
 // ADAM trainer parameters
-static constexpr float adamBeta1 = 0.99f;
+static constexpr float adamBeta1 = 0.9f;
 static constexpr float adamBeta2 = 0.999f;
 static constexpr float adamEpsilon = 10e-8;
-static constexpr float adamLearnRate = 0.0001f;
+static constexpr float adamLearnRate = 0.001f;
 
 static Random rnd;
 static std::once_flag stateFlag;
