@@ -1,5 +1,6 @@
 #include "TargetValuesKernel.hpp"
 #include <cuda_runtime.h>
+#include <cstdio>
 
 using namespace neuralnetwork::cuda;
 
@@ -9,6 +10,7 @@ __global__ void targetValuesKernel(LayerBatchOutputs outputs, SamplesBatch sampl
 
   if (samplesBatch.isTerminal[batchIndex]) {
     samplesBatch.targetOutput[batchIndex] = samplesBatch.rewards[batchIndex];
+    // printf("blah: %f\n", samplesBatch.targetOutput[batchIndex]);
   } else {
     float maxVal = *(outputs.OutputElem(batchIndex, 0));
     for (unsigned i = 1; i < outputs.layerSize - 1; i++) {
@@ -17,7 +19,9 @@ __global__ void targetValuesKernel(LayerBatchOutputs outputs, SamplesBatch sampl
 
     samplesBatch.targetOutput[batchIndex] = samplesBatch.rewards[batchIndex] +
         samplesBatch.futureRewardDiscount * maxVal;
+    // printf("bleh: %f\n", samplesBatch.targetOutput[batchIndex]);
   }
+
 }
 
 void TargetValuesKernel::Apply(const LayerBatchOutputs &lastLayer, const SamplesBatch &samplesBatch,

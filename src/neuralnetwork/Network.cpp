@@ -34,12 +34,11 @@ struct Network::NetworkImpl {
 
     if (isTrainable) {
       initialiseCuda();
+      allocateInputBatches();
+      inputBatchIndex = 0;
     } else {
       cudaNetwork = nullptr;
     }
-
-    allocateInputBatches();
-    inputBatchIndex = 0;
   }
 
   ~NetworkImpl() { freeInputBatches(); }
@@ -60,7 +59,7 @@ struct Network::NetworkImpl {
     return layerOutput;
   }
 
-  void Update(const SamplesProvider &samplesProvider) {
+  void Update(const SamplesProvider &samplesProvider, float learnRate) {
     assert(cudaNetwork != nullptr);
     assert(samplesProvider.NumSamples() <= spec.maxBatchSize);
 
@@ -91,7 +90,7 @@ struct Network::NetworkImpl {
       inputBatches[curInputBatch].futureRewardDiscount = sample.futureRewardDiscount;
     }
 
-    cudaNetwork->Train(inputBatches[curInputBatch]);
+    cudaNetwork->Train(inputBatches[curInputBatch], learnRate);
   }
 
   uptr<NetworkImpl> RefreshAndGetTarget(void) {
@@ -109,7 +108,7 @@ struct Network::NetworkImpl {
 
     auto result = make_unique<NetworkImpl>(spec, false);
     result->layerWeights = layerWeights;
-    return result;
+    return move(result);
   }
 
   EVector getLayerOutput(const EVector &prevLayer, const EMatrix &layerWeights,
@@ -214,7 +213,9 @@ Network::Network(const NetworkSpec &spec) : impl(new NetworkImpl(spec, true)) {}
 Network::~Network() = default;
 
 EVector Network::Process(const EVector &input) const { return impl->Process(input); }
-void Network::Update(const SamplesProvider &samplesProvider) { impl->Update(samplesProvider); }
+void Network::Update(const SamplesProvider &samplesProvider, float learnRate) {
+  impl->Update(samplesProvider, learnRate);
+}
 
 uptr<Network> Network::RefreshAndGetTarget(void) {
   // Its a bit annoying I cant used make_unique coz of the private constructor...

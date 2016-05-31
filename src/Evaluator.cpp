@@ -9,9 +9,8 @@
 
 using namespace connectfour;
 
-
 static void printStates(const std::vector<GameState> &states) {
-  for (const auto& gs : states) {
+  for (const auto &gs : states) {
     std::cout << gs << std::endl << std::endl;
   }
 
@@ -60,6 +59,9 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) con
 
     switch (rules->GameCompletionState(curState)) {
     case CompletionState::WIN:
+      curState.FlipState();
+      states.push_back(curState);
+
       if (curPlayer != primary) {
         printStates(states);
       }

@@ -24,10 +24,10 @@ using namespace neuralnetwork::cuda;
 using namespace std;
 
 // ADAM trainer parameters
-static constexpr float adamBeta1 = 0.9f;
+static constexpr float adamBeta1 = 0.99f;
 static constexpr float adamBeta2 = 0.999f;
 static constexpr float adamEpsilon = 10e-8;
-static constexpr float adamLearnRate = 0.001f;
+static constexpr float adamLearnRate = 0.0001f;
 
 static Random rnd;
 static std::once_flag stateFlag;
@@ -127,6 +127,19 @@ __global__ void updateWeightsWithAdam(LayerWeights weights, LayerWeights momentu
   *weights.Elem(row, col) -= lr * mc / sqrtf(rc + epsilon);
 }
 
+__global__ void updateWeightsWithSGD(LayerWeights weights, LayerWeights gradient, const float lr) {
+
+  const unsigned row = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned col = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (row >= weights.layerSize || col >= weights.inputSize) {
+    return;
+  }
+
+  float dw = *gradient.Elem(row, col) * lr;
+  *weights.Elem(row, col) -= dw;
+}
+
 struct CudaNetwork::CudaNetworkImpl {
   NetworkSpec networkSpec;
   vector<LayerWeights> d_layerWeights;
@@ -214,20 +227,27 @@ struct CudaNetwork::CudaNetworkImpl {
     updateTargetWeights();
   }
 
-  void Train(const QBatch &qbatch) {
-    // std::cout << "s: " << computeStream << std::endl;
-    uploadSamplesBatch(qbatch);
+  void Train(const QBatch &qbatch, float learnRate) {
+    // unsigned cols = qbatch.initialStates.cols;
+    // for (unsigned r = 0; r < qbatch.initialStates.rows; r++) {
+    //   unsigned numDiff = 0;
+    //   for (unsigned c = 0; c < qbatch.initialStates.cols; c++) {
+    //     if (fabs(qbatch.initialStates.data[c + r * cols] - qbatch.successorStates.data[c + r * cols]) > 0.001f) {
+    //       std::cout << "rc: " << r << " " << c << std::endl;
+    //       numDiff++;
+    //     }
+    //   }
+    //   std::cout << "numDiff: " << numDiff << " " << qbatch.rewardsGained[r] << " " << (qbatch.isEndStateTerminal[r] != 0) << std::endl;
+    //   std::cout << "action: " << qbatch.actionsTaken[r] << std::endl;
+    // }
 
-    // cudaStreamSynchronize(computeStream[otherStream]);
+    uploadSamplesBatch(qbatch);
 
     calculateTargets();
     forwardPass();
     backwardPass();
     updateAdamParams();
-    updateWeights();
-
-    // curStream = 1 - curStream;
-    // otherStream = 1 - otherStream;
+    updateWeights(learnRate);
   }
 
 private:
@@ -365,14 +385,17 @@ private:
     }
   }
 
-  void updateWeights(void) {
+  void updateWeights(float learnRateScale) {
     for (unsigned i = 0; i < d_layerWeights.size(); i++) {
       int bpgX = (d_layerWeights[i].inputSize + TPB_X - 1) / TPB_X;
       int bpgY = (d_layerWeights[i].layerSize + TPB_Y - 1) / TPB_Y;
 
       updateWeightsWithAdam<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1), 0, computeStream>>>(
           d_layerWeights[i], d_adamMomentum[i], d_adamRMS[i],
-          adamBeta1, adamBeta2, adamLearnRate, adamEpsilon);
+          adamBeta1, adamBeta2, adamLearnRate * learnRateScale, adamEpsilon);
+
+      // updateWeightsWithSGD<<<dim3(bpgX, bpgY, 1), dim3(TPB_X, TPB_Y, 1), 0, computeStream>>>(
+      //     d_layerWeights[i], d_layerGradients[i], learnRateScale);
     }
   }
 
@@ -476,6 +499,6 @@ void CudaNetwork::UpdateTarget(void) {
   impl->UpdateTarget();
 }
 
-void CudaNetwork::Train(const QBatch &qbatch) {
-  impl->Train(qbatch);
+void CudaNetwork::Train(const QBatch &qbatch, float learnRate) {
+  impl->Train(qbatch, learnRate);
 }

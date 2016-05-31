@@ -24,7 +24,9 @@ public:
   void SetTemperature(float temperature);
 
   GameAction SelectLearningAction(const GameState *state, const EVector &encodedState);
-  void Learn(const vector<ExperienceMoment> &moments);
+  void Learn(const vector<ExperienceMoment> &moments, float learnRate);
+
+  void Finalise(void);
 
   // This is for debugging.
   float GetQValue(const GameState &state, const GameAction &action) const;

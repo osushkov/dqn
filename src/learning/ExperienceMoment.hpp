@@ -2,6 +2,7 @@
 
 #include "../connectfour/GameState.hpp"
 #include "../math/Math.hpp"
+#include <cstdlib>
 
 using namespace connectfour;
 

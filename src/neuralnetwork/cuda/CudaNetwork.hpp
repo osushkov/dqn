@@ -17,7 +17,7 @@ struct QBatch {
 
   unsigned *actionsTaken;
   char *isEndStateTerminal;
-  float* rewardsGained;
+  float *rewardsGained;
 
   float futureRewardDiscount;
 };
@@ -31,7 +31,7 @@ public:
   void GetWeights(std::vector<math::MatrixView> &outWeights);
 
   void UpdateTarget(void);
-  void Train(const QBatch &qbatch);
+  void Train(const QBatch &qbatch, float learnRate);
 
   // math::MatrixView &batchInputs, const std::vector<float> &targetOutputs,
   //            const std::vector<unsigned> &targetOutputIndices);
