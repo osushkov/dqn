@@ -17,7 +17,6 @@ __device__ float activationValue(float in, const LayerActivation activation) {
   case LayerActivation::LEAKY_RELU:
     return fmaxf(0.01f * in, in);
   case LayerActivation::LINEAR:
-  case LayerActivation::SOFTMAX:
     return in;
   }
   assert(false); // should never get here.
@@ -35,7 +34,6 @@ __device__ float activationDerivative(float in, float out, const LayerActivation
   case LayerActivation::LEAKY_RELU:
     return in > 0.0f ? 1.0f : 0.01f;
   case LayerActivation::LINEAR:
-  case LayerActivation::SOFTMAX:
     return 1.0f;
   }
   assert(false); // should never get here.

@@ -12,6 +12,7 @@ CUDAFLAGS += -Xcudafe "--diag_suppress=boolean_controlling_expr_is_constant"
 
 ifdef RELEASE
   CCFLAGS += -O3
+  CCFLAGS += -mtune=native -march=native
   CUDAFLAGS += -O3
 endif
 

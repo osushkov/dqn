@@ -27,7 +27,8 @@ struct LearningAgent::LearningAgentImpl {
     neuralnetwork::NetworkSpec spec;
     spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
-    spec.hiddenLayers = {spec.numInputs * 2, spec.numInputs, spec.numInputs / 2};
+    spec.hiddenLayers = {spec.numInputs * 2, spec.numInputs, spec.numInputs, spec.numInputs,
+                         spec.numInputs / 2};
     spec.hiddenActivation = neuralnetwork::LayerActivation::LEAKY_RELU;
     spec.outputActivation = neuralnetwork::LayerActivation::TANH;
     spec.maxBatchSize = MOMENTS_BATCH_SIZE;
@@ -61,8 +62,8 @@ struct LearningAgent::LearningAgentImpl {
     if (Util::RandInterval(0.0, 1.0) < pRandom) {
       return chooseExplorativeAction(*state);
     } else {
-      return chooseWeightedAction(*state, encodedState);
-      // return chooseBestAction(*state, encodedState);
+      // return chooseWeightedAction(*state, encodedState);
+      return chooseBestAction(*state, encodedState);
     }
   }
 
@@ -79,6 +80,7 @@ struct LearningAgent::LearningAgentImpl {
     learnSamples.reserve(moments.size());
 
     for (const auto &moment : moments) {
+      // std::cout << (moment.timestamp % 10000) << std::endl;
       learnSamples.emplace_back(moment.initialState, moment.successorState,
                                 GameAction::ACTION_INDEX(moment.actionTaken),
                                 moment.isSuccessorTerminal, moment.reward, REWARD_DELAY_DISCOUNT);
@@ -91,8 +93,13 @@ struct LearningAgent::LearningAgentImpl {
     // obtain a write lock
     boost::unique_lock<boost::shared_mutex> lock(rwMutex);
 
+    if (learningNet == nullptr) {
+      return;
+    }
+
     targetNet = learningNet->RefreshAndGetTarget();
     learningNet.release();
+    learningNet = nullptr;
   }
 
   float GetQValue(const GameState &state, const GameAction &action) const {
@@ -209,6 +216,16 @@ EVector LearningAgent::EncodeGameState(const GameState *state) {
 
 LearningAgent::LearningAgent() : impl(new LearningAgentImpl()) {}
 LearningAgent::~LearningAgent() = default;
+
+uptr<LearningAgent> LearningAgent::Read(std::istream &in) {
+  uptr<LearningAgent> result = make_unique<LearningAgent>();
+  result->impl->targetNet = neuralnetwork::Network::Read(in);
+  result->impl->learningNet.release();
+  result->impl->learningNet = nullptr;
+  return result;
+}
+
+void LearningAgent::Write(std::ostream &out) { impl->targetNet->Write(out); }
 
 GameAction LearningAgent::SelectAction(const GameState *state) { return impl->SelectAction(state); }
 

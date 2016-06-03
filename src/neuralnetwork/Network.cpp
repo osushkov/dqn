@@ -212,6 +212,20 @@ struct Network::NetworkImpl {
 Network::Network(const NetworkSpec &spec) : impl(new NetworkImpl(spec, true)) {}
 Network::~Network() = default;
 
+uptr<Network> Network::Read(std::istream &in) {
+  NetworkSpec spec = NetworkSpec::Read(in);
+
+  uptr<Network> result = make_unique<Network>(spec);
+  result->impl = make_unique<NetworkImpl>(spec, false);
+  result->impl->layerWeights = math::Tensor::Read(in);
+  return move(result);
+}
+
+void Network::Write(std::ostream &out) {
+  impl->spec.Write(out);
+  impl->layerWeights.Write(out);
+}
+
 EVector Network::Process(const EVector &input) const { return impl->Process(input); }
 void Network::Update(const SamplesProvider &samplesProvider, float learnRate) {
   impl->Update(samplesProvider, learnRate);

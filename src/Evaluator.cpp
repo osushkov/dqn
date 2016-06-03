@@ -1,9 +1,12 @@
 
 #include "Evaluator.hpp"
 #include "common/Common.hpp"
+#include "common/Timer.hpp"
+#include "common/Util.hpp"
 #include "connectfour/GameAction.hpp"
 #include "connectfour/GameRules.hpp"
 #include "connectfour/GameState.hpp"
+#include "learning/RandomAgent.hpp"
 #include <cassert>
 #include <vector>
 
@@ -19,28 +22,39 @@ static void printStates(const std::vector<GameState> &states) {
 
 Evaluator::Evaluator(unsigned numTrials) : numTrials(numTrials) { assert(numTrials > 0); }
 
-std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary,
-                                            learning::Agent *opponent) const {
+std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary, learning::Agent *opponent) {
   assert(primary != nullptr && opponent != nullptr);
+
+  primaryMicroSecondsElapsed = 0;
+  opponentMicroSecondsElapsed = 0;
+  primaryActions = 0;
+  secondaryActions = 0;
 
   unsigned numWins = 0;
   unsigned numDraws = 0;
   for (unsigned i = 0; i < numTrials; i++) {
     int res = runTrial(primary, opponent);
     if (res == 0) {
-      std::cout << "ITS A DRAW!!!" << std::endl;
+      // std::cout << "ITS A DRAW!!!" << std::endl;
       numDraws++;
     } else if (res == 1) {
       numWins++;
     }
   }
+
+  std::cout << "Primary agent micro-seconds per move: "
+            << (primaryMicroSecondsElapsed / static_cast<float>(primaryActions)) << std::endl;
+  std::cout << "Opponent agent micro-seconds per move: "
+            << (opponentMicroSecondsElapsed / static_cast<float>(secondaryActions)) << std::endl;
+
   return make_pair(numWins / static_cast<float>(numTrials),
                    numDraws / static_cast<float>(numTrials));
 }
 
-int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) const {
+int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) {
   GameRules *rules = GameRules::Instance();
   vector<learning::Agent *> agents = {primary, opponent};
+  learning::RandomAgent randomAgent;
 
   std::vector<GameState> states;
 
@@ -49,7 +63,24 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) con
 
   while (true) {
     learning::Agent *curPlayer = agents[curPlayerIndex];
-    GameAction action = curPlayer->SelectAction(&curState);
+
+    GameAction action;
+    if (Util::RandInterval(0.0, 1.0) < 0.05) {
+      action = randomAgent.SelectAction(&curState);
+    } else {
+      Timer timer;
+      timer.Start();
+      action = curPlayer->SelectAction(&curState);
+      timer.Stop();
+
+      if (curPlayer == primary) {
+        primaryActions++;
+        primaryMicroSecondsElapsed += timer.GetNumElapsedMicroseconds();
+      } else {
+        secondaryActions++;
+        opponentMicroSecondsElapsed += timer.GetNumElapsedMicroseconds();
+      }
+    }
 
     if (curPlayer == primary) {
       states.push_back(curState);
@@ -63,7 +94,7 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) con
       states.push_back(curState);
 
       if (curPlayer != primary) {
-        printStates(states);
+        // printStates(states);
       }
       return curPlayer == primary ? 1 : -1;
     case CompletionState::LOSS:

@@ -5,6 +5,7 @@
 #include "../math/Math.hpp"
 #include "NetworkSpec.hpp"
 #include "SamplesProvider.hpp"
+#include <iostream>
 #include <vector>
 
 namespace neuralnetwork {
@@ -13,6 +14,9 @@ class Network {
 public:
   Network(const NetworkSpec &spec);
   virtual ~Network();
+
+  static uptr<Network> Read(std::istream &in);
+  void Write(std::ostream &out);
 
   EVector Process(const EVector &input) const;
 

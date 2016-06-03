@@ -18,7 +18,6 @@ inline float ActivationValue(LayerActivation func, float in) {
   case LayerActivation::LEAKY_RELU:
     return in > 0.0f ? in : (0.01f * in);
   case LayerActivation::LINEAR:
-  case LayerActivation::SOFTMAX:
     return in;
   }
   assert(false);
@@ -36,7 +35,6 @@ inline float ActivationDerivative(LayerActivation func, float in, float val) {
   case LayerActivation::LEAKY_RELU:
     return in > 0.0f ? 1.0f : 0.01f;
   case LayerActivation::LINEAR:
-  case LayerActivation::SOFTMAX:
     return 1.0f;
   }
   assert(false);

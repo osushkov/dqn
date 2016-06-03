@@ -3,10 +3,15 @@
 #include "../common/Common.hpp"
 #include "Math.hpp"
 
+#include <iostream>
+
 namespace math {
 
 class Tensor {
 public:
+  static Tensor Read(std::istream &in);
+  void Write(std::ostream &out);
+
   unsigned NumLayers(void) const;
   void AddLayer(const EMatrix &m);
 

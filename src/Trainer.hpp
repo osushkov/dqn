@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/Common.hpp"
-#include "learning/Agent.hpp"
+#include "learning/LearningAgent.hpp"
 #include <functional>
 
 using ProgressCallback = function<void(learning::Agent *, unsigned)>;
@@ -12,7 +12,7 @@ public:
   ~Trainer();
 
   void AddProgressCallback(ProgressCallback callback);
-  uptr<learning::Agent> TrainAgent(unsigned iters);
+  uptr<learning::LearningAgent> TrainAgent(unsigned iters);
 
 private:
   struct TrainerImpl;

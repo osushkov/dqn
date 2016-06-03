@@ -7,6 +7,8 @@
 #include "Agent.hpp"
 #include "ExperienceMoment.hpp"
 
+#include <iostream>
+
 using namespace connectfour;
 
 namespace learning {
@@ -17,6 +19,9 @@ public:
 
   LearningAgent();
   virtual ~LearningAgent();
+
+  static uptr<LearningAgent> Read(std::istream &in);
+  void Write(std::ostream &out);
 
   GameAction SelectAction(const GameState *state) override;
 

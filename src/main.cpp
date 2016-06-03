@@ -8,8 +8,10 @@
 #include "learning/ExperienceMemory.hpp"
 #include "learning/LearningAgent.hpp"
 #include "learning/RandomAgent.hpp"
+#include "thirdparty/MinMaxAgent.hpp"
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <iostream>
 
 using namespace learning;
@@ -18,13 +20,19 @@ using namespace connectfour;
 int main(int argc, char **argv) {
   srand(time(NULL));
 
-  Trainer trainer;
-  auto trainedAgent = trainer.TrainAgent(100000);
+  // Trainer trainer;
+  // auto trainedAgent = trainer.TrainAgent(20000000);
+  // std::ofstream saveFile("agent.dat");
+  // trainedAgent->Write(saveFile);
 
+  std::ifstream saveFile("agent.dat");
+  auto trainedAgent = learning::LearningAgent::Read(saveFile);
+
+  MinMaxAgent minmaxAgent;
   learning::RandomAgent baselineAgent;
-
   Evaluator eval(1000);
-  auto r = eval.Evaluate(trainedAgent.get(), &baselineAgent);
+  auto r = eval.Evaluate(trainedAgent.get(), &minmaxAgent);
+  // auto r = eval.Evaluate(&minmaxAgent, &baselineAgent);
   std::cout << "r : " << r.first << " / " << r.second << std::endl;
 
   // RandomAgent ra;
