@@ -17,61 +17,32 @@
 using namespace learning;
 using namespace connectfour;
 
+static constexpr bool DO_TRAINING = false;
+static constexpr bool DO_EVALUATION = true;
+
 int main(int argc, char **argv) {
   srand(time(NULL));
 
-  // Trainer trainer;
-  // auto trainedAgent = trainer.TrainAgent(20000000);
-  // std::ofstream saveFile("agent.dat");
-  // trainedAgent->Write(saveFile);
+  // Train an agent.
+  if (DO_TRAINING) {
+    Trainer trainer;
+    auto trainedAgent = trainer.TrainAgent(1000000);
+    std::ofstream saveFile("agent.dat");
+    trainedAgent->Write(saveFile);
+  }
 
-  std::ifstream saveFile("agent.dat");
-  auto trainedAgent = learning::LearningAgent::Read(saveFile);
+  // Evaluate a previously trained agent against a min-max agent.
+  if (DO_EVALUATION) {
+    std::ifstream saveFile("agent.dat");
+    auto trainedAgent = learning::LearningAgent::Read(saveFile);
 
-  MinMaxAgent minmaxAgent;
-  learning::RandomAgent baselineAgent;
-  Evaluator eval(1000);
-  auto r = eval.Evaluate(trainedAgent.get(), &minmaxAgent);
-  // auto r = eval.Evaluate(&minmaxAgent, &baselineAgent);
-  std::cout << "r : " << r.first << " / " << r.second << std::endl;
-
-  // RandomAgent ra;
-  // Evaluator eval(1000);
-  // auto r = eval.Evaluate(&ra, &ra);
-  // std::cout << "r : " << r.first << " / " << r.second << std::endl;
-
-  // learning::LearningAgent agent;
-  // GameState gs = GameRules::Instance()->InitialState();
-  // gs.PlaceToken(3);
-  // gs.PlaceToken(5);
-  //
-  // std::vector<ExperienceMoment> learnMoments;
-  // for (unsigned i = 0; i < GameAction::ALL_ACTIONS().size(); i++) {
-  //   auto encodedStartState = LearningAgent::EncodeGameState(&gs);
-  //   GameAction action = GameAction::ACTION(i);
-  //   GameState successor = gs.SuccessorState(action);
-  //   auto encodedSuccessor = LearningAgent::EncodeGameState(&successor);
-  //
-  //   if (i < GameAction::ALL_ACTIONS().size() / 2) {
-  //     learnMoments.emplace_back(encodedStartState, action, encodedSuccessor, 1.0, true);
-  //   } else {
-  //     learnMoments.emplace_back(encodedStartState, action, encodedSuccessor, -1.0, true);
-  //   }
-  // }
-  //
-  // for (const auto &action : GameAction::ALL_ACTIONS()) {
-  //   std::cout << "q value: " << action << " = " << agent.GetQValue(gs, action) << std::endl;
-  // }
-  //
-  // std::cout << "learning..." << std::endl;
-  // for (unsigned i = 0; i < 10000; i++) {
-  //   agent.Learn(learnMoments);
-  // }
-  //
-  // std::cout << "finished learning" << std::endl;
-  // for (const auto &action : GameAction::ALL_ACTIONS()) {
-  //   std::cout << "q value: " << action << " = " << agent.GetQValue(gs, action) << std::endl;
-  // }
+    MinMaxAgent minmaxAgent;
+    learning::RandomAgent baselineAgent;
+    Evaluator eval(1000);
+    auto r = eval.Evaluate(trainedAgent.get(), &minmaxAgent);
+    // auto r = eval.Evaluate(&minmaxAgent, &baselineAgent);
+    std::cout << "r : " << r.first << " / " << r.second << std::endl;
+  }
 
   return 0;
 }
