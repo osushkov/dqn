@@ -216,6 +216,8 @@ static void abMinimax(bool maximizeOrMinimize, char color, int depth, Board &boa
   score = bestScore;
 }
 
+MinMaxAgent::MinMaxAgent(unsigned depth) { g_maxDepth = depth; }
+
 GameAction MinMaxAgent::SelectAction(const GameState *state) {
   Board board;
   for (unsigned r = 0; r < BOARD_HEIGHT; r++) {

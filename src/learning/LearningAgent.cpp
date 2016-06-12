@@ -27,8 +27,7 @@ struct LearningAgent::LearningAgentImpl {
     neuralnetwork::NetworkSpec spec;
     spec.numInputs = BOARD_WIDTH * BOARD_HEIGHT * 2;
     spec.numOutputs = GameAction::ALL_ACTIONS().size();
-    spec.hiddenLayers = {spec.numInputs * 2, spec.numInputs, spec.numInputs, spec.numInputs,
-                         spec.numInputs / 2};
+    spec.hiddenLayers = {spec.numInputs * 2, spec.numInputs, spec.numInputs / 2};
     spec.hiddenActivation = neuralnetwork::LayerActivation::LEAKY_RELU;
     spec.outputActivation = neuralnetwork::LayerActivation::TANH;
     spec.maxBatchSize = MOMENTS_BATCH_SIZE;
@@ -62,8 +61,8 @@ struct LearningAgent::LearningAgentImpl {
     if (Util::RandInterval(0.0, 1.0) < pRandom) {
       return chooseExplorativeAction(*state);
     } else {
-      // return chooseWeightedAction(*state, encodedState);
-      return chooseBestAction(*state, encodedState);
+      return chooseWeightedAction(*state, encodedState);
+      // return chooseBestAction(*state, encodedState);
     }
   }
 

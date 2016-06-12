@@ -42,10 +42,10 @@ std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary, learning::
     }
   }
 
-  std::cout << "Primary agent micro-seconds per move: "
-            << (primaryMicroSecondsElapsed / static_cast<float>(primaryActions)) << std::endl;
-  std::cout << "Opponent agent micro-seconds per move: "
-            << (opponentMicroSecondsElapsed / static_cast<float>(secondaryActions)) << std::endl;
+  // std::cout << "Primary agent micro-seconds per move: "
+  //           << (primaryMicroSecondsElapsed / static_cast<float>(primaryActions)) << std::endl;
+  // std::cout << "Opponent agent micro-seconds per move: "
+  //           << (opponentMicroSecondsElapsed / static_cast<float>(secondaryActions)) << std::endl;
 
   return make_pair(numWins / static_cast<float>(numTrials),
                    numDraws / static_cast<float>(numTrials));
@@ -60,12 +60,14 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) {
 
   unsigned curPlayerIndex = rand() % agents.size();
   GameState curState(rules->InitialState());
+  curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
+  curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
 
   while (true) {
     learning::Agent *curPlayer = agents[curPlayerIndex];
 
     GameAction action;
-    if (Util::RandInterval(0.0, 1.0) < 0.05) {
+    if (Util::RandInterval(0.0, 1.0) < 0.01) {
       action = randomAgent.SelectAction(&curState);
     } else {
       Timer timer;
