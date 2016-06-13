@@ -34,6 +34,7 @@ std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary, learning::
   unsigned numDraws = 0;
   for (unsigned i = 0; i < numTrials; i++) {
     int res = runTrial(primary, opponent);
+    std::cout << "trial! winner: " << res << std::endl;
     if (res == 0) {
       // std::cout << "ITS A DRAW!!!" << std::endl;
       numDraws++;
@@ -42,10 +43,10 @@ std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary, learning::
     }
   }
 
-  // std::cout << "Primary agent micro-seconds per move: "
-  //           << (primaryMicroSecondsElapsed / static_cast<float>(primaryActions)) << std::endl;
-  // std::cout << "Opponent agent micro-seconds per move: "
-  //           << (opponentMicroSecondsElapsed / static_cast<float>(secondaryActions)) << std::endl;
+  std::cout << "Primary agent micro-seconds per move: "
+            << (primaryMicroSecondsElapsed / static_cast<float>(primaryActions)) << std::endl;
+  std::cout << "Opponent agent micro-seconds per move: "
+            << (opponentMicroSecondsElapsed / static_cast<float>(secondaryActions)) << std::endl;
 
   return make_pair(numWins / static_cast<float>(numTrials),
                    numDraws / static_cast<float>(numTrials));
@@ -61,13 +62,15 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) {
   unsigned curPlayerIndex = rand() % agents.size();
   GameState curState(rules->InitialState());
   curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
+  curState.FlipState();
   curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
+  curState.FlipState();
 
   while (true) {
     learning::Agent *curPlayer = agents[curPlayerIndex];
 
     GameAction action;
-    if (Util::RandInterval(0.0, 1.0) < 0.01) {
+    if (Util::RandInterval(0.0, 1.0) < 0.0) {
       action = randomAgent.SelectAction(&curState);
     } else {
       Timer timer;
@@ -96,7 +99,7 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) {
       states.push_back(curState);
 
       if (curPlayer != primary) {
-        // printStates(states);
+        printStates(states);
       }
       return curPlayer == primary ? 1 : -1;
     case CompletionState::LOSS:

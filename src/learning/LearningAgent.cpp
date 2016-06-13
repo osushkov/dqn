@@ -79,7 +79,6 @@ struct LearningAgent::LearningAgentImpl {
     learnSamples.reserve(moments.size());
 
     for (const auto &moment : moments) {
-      // std::cout << (moment.timestamp % 10000) << std::endl;
       learnSamples.emplace_back(moment.initialState, moment.successorState,
                                 GameAction::ACTION_INDEX(moment.actionTaken),
                                 moment.isSuccessorTerminal, moment.reward, REWARD_DELAY_DISCOUNT);
@@ -107,6 +106,32 @@ struct LearningAgent::LearningAgentImpl {
     return qvalues(GameAction::ACTION_INDEX(action));
   }
 
+  float RateGameState(const GameState &state) {
+    vector<float> actions = RateAvailableActions(state);
+    if (actions.empty()) {
+      return 0.0f;
+    }
+
+    float best = actions[0];
+    for (unsigned i = 1; i < actions.size(); i++) {
+      best = max(best, actions[i]);
+    }
+    return best;
+  }
+
+  vector<float> RateAvailableActions(const GameState &state) {
+    EVector encoded = LearningAgent::EncodeGameState(&state);
+    EVector qvalues = targetNet->Process(encoded);
+
+    std::vector<unsigned> availableActions = state.AvailableActions();
+
+    vector<float> result;
+    for (unsigned i = 0; i < availableActions.size(); i++) {
+      result.push_back(qvalues(availableActions[i]));
+    }
+    return result;
+  }
+
   GameAction chooseBestAction(const GameState &state, const EVector &encodedState) {
     EVector qvalues = targetNet->Process(encodedState);
     assert(qvalues.rows() == static_cast<int>(GameAction::ALL_ACTIONS().size()));
@@ -127,7 +152,6 @@ struct LearningAgent::LearningAgentImpl {
   }
 
   GameAction chooseExplorativeAction(const GameState &state) {
-    // std::cout << "choosing random" << std::endl;
     auto aa = state.AvailableActions();
     return GameAction::ACTION(aa[rand() % aa.size()]);
   }
@@ -153,7 +177,6 @@ struct LearningAgent::LearningAgentImpl {
       }
     }
 
-    std::cout << "sample: " << sample << std::endl;
     return chooseExplorativeAction(state);
   }
 };
@@ -183,35 +206,6 @@ EVector LearningAgent::EncodeGameState(const GameState *state) {
 
   return result;
 }
-
-// EVector LearningAgent::EncodeGameState(const GameState *state) {
-//   EVector result(BOARD_WIDTH * BOARD_HEIGHT);
-//   result.fill(0.0f);
-//
-//   unsigned ri = 0;
-//   for (unsigned r = 0; r < BOARD_HEIGHT; r++) {
-//     for (unsigned c = 0; c < BOARD_WIDTH; c++) {
-//
-//       switch (state->GetCell(r, c)) {
-//       case CellState::EMPTY:
-//         result(ri) = 0.0f;
-//         break;
-//       case CellState::MY_TOKEN:
-//         result(ri) = 1.0f;
-//         break;
-//       case CellState::OPPONENT_TOKEN:
-//         result(ri) = -1.0f;
-//         break;
-//       default:
-//         assert(false);
-//       }
-//
-//       ri++;
-//     }
-//   }
-//
-//   return result;
-// }
 
 LearningAgent::LearningAgent() : impl(new LearningAgentImpl()) {}
 LearningAgent::~LearningAgent() = default;
@@ -244,4 +238,10 @@ void LearningAgent::Finalise(void) { impl->Finalise(); }
 
 float LearningAgent::GetQValue(const GameState &state, const GameAction &action) const {
   return impl->GetQValue(state, action);
+}
+
+float LearningAgent::RateGameState(const GameState &state) { return impl->RateGameState(state); }
+
+vector<float> LearningAgent::RateAvailableActions(const GameState &state) {
+  return impl->RateAvailableActions(state);
 }

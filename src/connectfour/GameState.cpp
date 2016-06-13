@@ -83,6 +83,7 @@ size_t GameState::HashCode(void) const {
   return result;
 }
 
+// TODO: this should be cached as it doesnt change.
 vector<unsigned> GameState::AvailableActions(void) const {
   const vector<GameAction> &actionSet = GameAction::ALL_ACTIONS();
 

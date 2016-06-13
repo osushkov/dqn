@@ -4,16 +4,18 @@
 #include "../common/Common.hpp"
 #include "../connectfour/GameAction.hpp"
 #include "../connectfour/GameState.hpp"
+#include "../mcts/StateActionRater.hpp"
 #include "Agent.hpp"
 #include "ExperienceMoment.hpp"
 
 #include <iostream>
 
 using namespace connectfour;
+using namespace mcts;
 
 namespace learning {
 
-class LearningAgent : public Agent {
+class LearningAgent : public Agent, public StateActionRater {
 public:
   static EVector EncodeGameState(const GameState *state);
 
@@ -35,6 +37,9 @@ public:
 
   // This is for debugging.
   float GetQValue(const GameState &state, const GameAction &action) const;
+
+  float RateGameState(const GameState &state) override;
+  vector<float> RateAvailableActions(const GameState &state) override;
 
 private:
   struct LearningAgentImpl;

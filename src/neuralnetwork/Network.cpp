@@ -65,7 +65,6 @@ struct Network::NetworkImpl {
 
     unsigned curInputBatch = (inputBatchIndex++) % 2;
 
-    // std::cout << "curInputBatch: " << (int)curInputBatch << std::endl;
     inputBatches[curInputBatch].batchSize = samplesProvider.NumSamples();
     inputBatches[curInputBatch].initialStates.rows = samplesProvider.NumSamples();
     inputBatches[curInputBatch].successorStates.rows = samplesProvider.NumSamples();

@@ -11,8 +11,9 @@ CUDAFLAGS += --use_fast_math
 CUDAFLAGS += -Xcudafe "--diag_suppress=boolean_controlling_expr_is_constant"
 
 ifdef RELEASE
-  CCFLAGS += -O3
-  CCFLAGS += -mtune=native -march=native
+  CCFLAGS += -Ofast
+  CCFLAGS += -mtune=native -march=native -mfpmath=sse
+  CCFLAGS += -mmmx -msse -msse2 -msse3 -mssse3 -msse4.1 -msse4.2
   CUDAFLAGS += -O3
 endif
 

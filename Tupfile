@@ -2,9 +2,10 @@ include_rules
 : src/*.o \
 src/thirdparty/thirdparty.a \
 src/learning/learning.a \
+src/mcts/mcts.a \
 src/neuralnetwork/neuralnetwork.a \
 src/neuralnetwork/cuda/cuda.a \
 src/connectfour/connectfour.a \
 src/math/math.a \
 src/common/common.a \
-|> $(CC) %f -o %o $(CLFLAGS) |> dqn
+|> $(CC) $(CCFLAGS) %f -o %o $(CLFLAGS) |> dqn

@@ -7,6 +7,7 @@
 #include "connectfour/GameState.hpp"
 #include "learning/ExperienceMemory.hpp"
 #include "learning/LearningAgent.hpp"
+#include "learning/MCTSAgent.hpp"
 #include "learning/RandomAgent.hpp"
 #include "thirdparty/MinMaxAgent.hpp"
 #include <cstdlib>
@@ -17,7 +18,7 @@
 using namespace learning;
 using namespace connectfour;
 
-static constexpr bool DO_TRAINING = true;
+static constexpr bool DO_TRAINING = false;
 static constexpr bool DO_EVALUATION = true;
 
 std::pair<float, float> evaluateAgent(learning::Agent *agent, learning::Agent *opponent) {
@@ -56,11 +57,12 @@ int main(int argc, char **argv) {
   if (DO_EVALUATION) {
     std::ifstream saveFile("agent.dat");
     auto trainedAgent = learning::LearningAgent::Read(saveFile);
+    auto mctsAgent = make_unique<learning::MCTSAgent>(move(trainedAgent));
 
-    MinMaxAgent minmaxAgent(3);
+    MinMaxAgent minmaxAgent(2);
     learning::RandomAgent baselineAgent;
-    Evaluator eval(1000);
-    auto r = eval.Evaluate(trainedAgent.get(), &minmaxAgent);
+    Evaluator eval(100);
+    auto r = eval.Evaluate(mctsAgent.get(), &minmaxAgent);
     // auto r = eval.Evaluate(&minmaxAgent, &baselineAgent);
     std::cout << "r : " << r.first << " / " << r.second << std::endl;
   }
