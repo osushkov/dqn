@@ -109,6 +109,7 @@ struct LearningAgent::LearningAgentImpl {
   float RateGameState(const GameState &state) {
     vector<float> actions = RateAvailableActions(state);
     if (actions.empty()) {
+      assert(false);
       return 0.0f;
     }
 

@@ -4,7 +4,7 @@
 
 using namespace learning;
 
-static constexpr unsigned MAX_PLAYOUT_DEPTH = 5;
+static constexpr unsigned MAX_PLAYOUT_DEPTH = 0;
 static constexpr unsigned NUM_ITERATIONS = 20000;
 
 struct MCTSAgent::MCTSAgentImpl {

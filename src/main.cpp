@@ -45,10 +45,14 @@ int main(int argc, char **argv) {
         MinMaxAgent minmaxAgent2(2);
         auto mar2 = evaluateAgent(agent, &minmaxAgent2);
         std::cout << "minmax2 " << iters << "\t" << mar2.first << std::endl;
+
+        MinMaxAgent minmaxAgent3(3);
+        auto mar3 = evaluateAgent(agent, &minmaxAgent3);
+        std::cout << "minmax3 " << iters << "\t" << mar3.first << std::endl;
       }
     });
 
-    auto trainedAgent = trainer.TrainAgent(2000000);
+    auto trainedAgent = trainer.TrainAgent(3000000);
     std::ofstream saveFile("agent.dat");
     trainedAgent->Write(saveFile);
   }
@@ -59,7 +63,7 @@ int main(int argc, char **argv) {
     auto trainedAgent = learning::LearningAgent::Read(saveFile);
     auto mctsAgent = make_unique<learning::MCTSAgent>(move(trainedAgent));
 
-    MinMaxAgent minmaxAgent(2);
+    MinMaxAgent minmaxAgent(4);
     learning::RandomAgent baselineAgent;
     Evaluator eval(100);
     auto r = eval.Evaluate(mctsAgent.get(), &minmaxAgent);

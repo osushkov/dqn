@@ -10,7 +10,7 @@
 using namespace mcts;
 
 static const float P_RANDOM = 0.1f;
-static const float PLAYOUT_TEMPERATURE = 0.01f;
+static const float PLAYOUT_TEMPERATURE = 0.001f;
 
 struct MCTS::MCTSImpl {
   uptr<StateActionRater> rater;
@@ -35,9 +35,7 @@ struct MCTS::MCTSImpl {
     vector<ActionUtility> result;
     for (const auto &u : utilities) {
       result.emplace_back(GameAction::ACTION(u.first), u.second);
-      std::cout << u.second << std::endl;
     }
-    std::cout << std::endl;
     return result;
   }
 
@@ -98,12 +96,21 @@ struct MCTS::MCTSImpl {
         }
       }
 
-      curState = randomSuccessor(curState); // chooseSuccessor(curState);
+      curState = randomSuccessor(curState);
       curPlayerIndex = 1 - curPlayerIndex;
     }
 
     float utilFlip = startNode->PlayerIndex() == curPlayerIndex ? 1.0f : -1.0f;
-    return rater->RateGameState(curState) * utilFlip;
+    switch (rules->GameCompletionState(curState)) {
+    case CompletionState::WIN:
+      return 1.0f * utilFlip;
+    case CompletionState::LOSS:
+      return -1.0f * utilFlip;
+    case CompletionState::DRAW:
+      return 0.0f;
+    default:
+      return rater->RateGameState(curState) * utilFlip;
+    }
   }
 
   double playoutRandom(Node *startNode) {
@@ -112,7 +119,7 @@ struct MCTS::MCTSImpl {
     unsigned curPlayerIndex = startNode->PlayerIndex();
     GameState curState = *startNode->GetState();
 
-    for (unsigned i = 0; i < maxPlayoutDepth; i++) {
+    while (true) {
       CompletionState completionState = rules->GameCompletionState(curState);
       if (completionState != CompletionState::UNFINISHED) {
         // Account for the fact that the winner may not be the player of the original startNode.
@@ -137,8 +144,8 @@ struct MCTS::MCTSImpl {
       curPlayerIndex = 1 - curPlayerIndex;
     }
 
-    float utilFlip = startNode->PlayerIndex() == curPlayerIndex ? 1.0f : -1.0f;
-    return rater->RateGameState(curState) * utilFlip;
+    assert(false);
+    return 0.0f;
   }
 
   GameState randomSuccessor(const GameState &state) {

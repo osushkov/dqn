@@ -43,10 +43,10 @@ std::pair<float, float> Evaluator::Evaluate(learning::Agent *primary, learning::
     }
   }
 
-  std::cout << "Primary agent micro-seconds per move: "
-            << (primaryMicroSecondsElapsed / static_cast<float>(primaryActions)) << std::endl;
-  std::cout << "Opponent agent micro-seconds per move: "
-            << (opponentMicroSecondsElapsed / static_cast<float>(secondaryActions)) << std::endl;
+  // std::cout << "Primary agent micro-seconds per move: "
+  //           << (primaryMicroSecondsElapsed / static_cast<float>(primaryActions)) << std::endl;
+  // std::cout << "Opponent agent micro-seconds per move: "
+  //           << (opponentMicroSecondsElapsed / static_cast<float>(secondaryActions)) << std::endl;
 
   return make_pair(numWins / static_cast<float>(numTrials),
                    numDraws / static_cast<float>(numTrials));
@@ -99,7 +99,7 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) {
       states.push_back(curState);
 
       if (curPlayer != primary) {
-        printStates(states);
+        // printStates(states);
       }
       return curPlayer == primary ? 1 : -1;
     case CompletionState::LOSS:
